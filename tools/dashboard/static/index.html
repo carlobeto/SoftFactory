@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoftFactory Control Plane - Dashboard de Proyectos y Gobernanza</title>
+  <meta name="description" content="Panel de administración y visualización de proyectos, etapas de ciclo de vida, artefactos y ramas Git de la Software Factory.">
+  
+  <!-- Tipografía moderna Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Librerías cliente para renderizado (Markdown y Mermaid) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+  <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Navbar Superior -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="logo-icon">⚡</div>
+        <div class="brand-text">
+          <h1>SoftFactory <span class="badge-sub">Control Plane</span></h1>
+          <span class="status-indicator"><span class="pulse-dot"></span> Fábrica Conectada (Puerto 5000)</span>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div class="current-project-pill" id="current-project-pill">
+          <span class="pill-label">PROYECTO ACTIVO:</span>
+          <span class="pill-name" id="active-project-name">Cargando...</span>
+          <span class="pill-status badge-initialized" id="active-project-status">...</span>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-open-grill" class="btn btn-primary" title="Iniciar sesión de descubrimiento con Grill-Me">
+          ✨ Nueva App (Grill-Me)
+        </button>
+        <button id="btn-export-app" class="btn btn-secondary" title="Exportar y empaquetar aplicación actual">
+          📦 Exportar
+        </button>
+        <button id="btn-open-reset" class="btn btn-danger-ghost" title="Limpiar y reiniciar la fábrica">
+          🔄 Reset
+        </button>
+      </div>
+    </header>
+
+    <!-- Pipeline Visual de 5 Etapas -->
+    <nav class="pipeline-stepper" aria-label="Progreso de las etapas">
+      <div class="step-card" id="step-discovery" data-stage="discovery_notes">
+        <div class="step-number">0</div>
+        <div class="step-info">
+          <div class="step-title">Discovery & Grilling</div>
+          <div class="step-sub">DISCOVERY_NOTES.md</div>
+        </div>
+        <span class="step-status-badge badge-pending" id="badge-discovery">Pendiente</span>
+      </div>
+
+      <div class="step-arrow">➔</div>
+
+      <div class="step-card" id="step-prd" data-stage="prd">
+        <div class="step-number">1</div>
+        <div class="step-info">
+          <div class="step-title">Product Manager</div>
+          <div class="step-sub">PRD.md & User Stories</div>
+        </div>
+        <span class="step-status-badge badge-pending" id="badge-prd">Pendiente</span>
+      </div>
+
+      <div class="step-arrow">➔</div>
+
+      <div class="step-card" id="step-system_design" data-stage="system_design">
+        <div class="step-number">2</div>
+        <div class="step-info">
+          <div class="step-title">Arquitecto</div>
+          <div class="step-sub">SYSTEM_DESIGN.md</div>
+        </div>
+        <span class="step-status-badge badge-pending" id="badge-system_design">Pendiente</span>
+      </div>
+
+      <div class="step-arrow">➔</div>
+
+      <div class="step-card" id="step-patch" data-stage="patch">
+        <div class="step-number">3</div>
+        <div class="step-info">
+          <div class="step-title">Programador</div>
+          <div class="step-sub">Código & model.patch</div>
+        </div>
+        <span class="step-status-badge badge-pending" id="badge-patch">Pendiente</span>
+      </div>
+
+      <div class="step-arrow">➔</div>
+
+      <div class="step-card" id="step-qa_report" data-stage="qa_report">
+        <div class="step-number">4</div>
+        <div class="step-info">
+          <div class="step-title">QA Hostile Auditor</div>
+          <div class="step-sub">QA_REPORT.md & Tests</div>
+        </div>
+        <span class="step-status-badge badge-pending" id="badge-qa_report">Pendiente</span>
+      </div>
+    </nav>
+
+    <!-- Cuerpo Principal con Sidebar y Panel de Contenido -->
+    <main class="main-content-layout">
+      <!-- Sidebar Izquierda: Árbol de Navegación y Ramas Git -->
+      <aside class="sidebar-pane">
+        <!-- Selector de Origen: Workspace Activo vs Ramas Git -->
+        <div class="sidebar-section">
+          <h2 class="sidebar-heading">Entorno de Inspección</h2>
+          <div class="source-toggle-group">
+            <button id="toggle-workspace" class="source-btn active">
+              <span class="icon">💻</span> Workspace Activo
+            </button>
+            <button id="toggle-git" class="source-btn">
+              <span class="icon">🌿</span> Ramas Git (<span id="branch-count">0</span>)
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista de Ramas Git (visible cuando se selecciona pestaña Git) -->
+        <div class="sidebar-section git-branches-container hidden" id="git-branches-section">
+          <h2 class="sidebar-heading">Proyectos en Git</h2>
+          <div class="branch-list" id="branch-list">
+            <!-- Inyectado dinámicamente -->
+          </div>
+        </div>
+
+        <!-- Artefactos del ciclo activo / seleccionado -->
+        <div class="sidebar-section">
+          <h2 class="sidebar-heading">Artefactos del Ciclo</h2>
+          <ul class="artifact-tree" id="artifact-tree">
+            <li class="artifact-item active" data-artifact="discovery_notes">
+              <span class="file-icon">📋</span> DISCOVERY_NOTES.md
+            </li>
+            <li class="artifact-item" data-artifact="prd">
+              <span class="file-icon">📄</span> PRD.md
+            </li>
+            <li class="artifact-item" data-artifact="system_design">
+              <span class="file-icon">📐</span> SYSTEM_DESIGN.md
+            </li>
+            <li class="artifact-item" data-artifact="tasks">
+              <span class="file-icon">✅</span> TASKS.md
+            </li>
+            <li class="artifact-item" data-artifact="change_plan">
+              <span class="file-icon">📝</span> CHANGE_PLAN.md
+            </li>
+            <li class="artifact-item" data-artifact="patch">
+              <span class="file-icon">🧩</span> model.patch
+            </li>
+            <li class="artifact-item" data-artifact="qa_report">
+              <span class="file-icon">🛡️</span> QA_REPORT.md
+            </li>
+          </ul>
+        </div>
+
+        <!-- Archivos en Workspace -->
+        <div class="sidebar-section" id="workspace-files-section">
+          <h2 class="sidebar-heading">Archivos de Código (Workspace)</h2>
+          <ul class="workspace-file-list" id="workspace-files-list">
+            <li class="empty-state-small">Sin archivos generados aún</li>
+          </ul>
+        </div>
+      </aside>
+
+      <!-- Panel Central: Visor de Documentos y Diffs -->
+      <section class="content-viewer-pane">
+        <!-- Barra de Estado del Visor -->
+        <div class="viewer-top-bar">
+          <div class="breadcrumb-container" id="viewer-breadcrumbs">
+            <span class="bc-origin">Workspace Activo</span> / 
+            <span class="bc-target" id="bc-filename">DISCOVERY_NOTES.md</span>
+          </div>
+
+          <!-- Acciones de Vista (Renderizado vs Código Plano vs Diff) -->
+          <div class="viewer-controls">
+            <div class="view-mode-switch">
+              <button class="view-mode-btn active" id="btn-view-rendered">Formato Enriquecido</button>
+              <button class="view-mode-btn" id="btn-view-raw">Texto Markdown</button>
+              <button class="view-mode-btn" id="btn-view-diff" style="display: none;">Diferencial Git</button>
+            </div>
+            <button id="btn-copy-content" class="btn btn-secondary-sm" title="Copiar contenido al portapapeles">📋 Copiar</button>
+          </div>
+        </div>
+
+        <!-- Banner de Rama Histórica (se muestra al ver una rama que no es la activa) -->
+        <div class="git-branch-banner hidden" id="git-branch-banner">
+          <div class="banner-info">
+            <span class="banner-badge">Modo Inspección Git</span>
+            <span class="banner-text">Visualizando artefactos de la rama histórica: <strong id="banner-branch-name">app/weather-tool</strong></span>
+          </div>
+          <button id="btn-restore-branch" class="btn btn-warning-sm">
+            📥 Cargar / Restaurar Proyecto en Workspace
+          </button>
+        </div>
+
+        <!-- Contenedor del Documento -->
+        <div class="document-render-container" id="document-render-container">
+          <div class="markdown-body" id="markdown-view">
+            <!-- Contenido renderizado con marked y mermaid -->
+          </div>
+          <pre class="raw-code-body hidden" id="raw-view"><code id="raw-code"></code></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MODAL: Grill-Me Interactive Interview -->
+  <div class="modal-backdrop hidden" id="modal-grill">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>✨ Requirements Discovery & Grilling (Fase 0)</h3>
+          <p class="modal-subtitle">Desgrana tu idea inicial mediante el protocolo de árbol de decisiones antes de generar el PRD.</p>
+        </div>
+        <button class="modal-close" id="btn-close-grill">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="grill-prompt">Requerimiento Semilla (Frase inicial):</label>
+          <input type="text" id="grill-prompt" class="form-control" placeholder="Ej: Construir una API para gestionar clientes y reservas con autenticación JWT">
+        </div>
+
+        <div class="grill-rounds-preview">
+          <div class="round-accordion">
+            <div class="round-head"><strong>Ronda 1:</strong> Estilo de API, Protocolo y Entidades del Dominio</div>
+            <div class="round-body">
+              <div class="form-group">
+                <label>Estilo Arquitectónico:</label>
+                <select id="grill-opt-style" class="form-control">
+                  <option value="RESTful API sobre HTTP con payloads JSON y códigos de estado estándar" selected>RESTful API JSON (Recomendado)</option>
+                  <option value="FastAPI asíncrono con esquemas Pydantic y documentación OpenAPI automática">FastAPI (Python) asíncrono</option>
+                  <option value="gRPC con Protobuf para alta performance y baja latencia">gRPC con Protobuf</option>
+                  <option value="CLI interactiva con comandos estructurados">Herramienta CLI interactiva</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Entidades Principales:</label>
+                <input type="text" id="grill-opt-entities" class="form-control" placeholder="Ej: Clientes, Reservas, Pagos" value="Clientes, Reservas, Pagos">
+              </div>
+            </div>
+          </div>
+
+          <div class="round-accordion">
+            <div class="round-head"><strong>Ronda 2:</strong> Seguridad, Autenticación y Manejo de Errores</div>
+            <div class="round-body">
+              <div class="form-group">
+                <label>Esquema de Seguridad:</label>
+                <select id="grill-opt-auth" class="form-control">
+                  <option value="Bearer Token (JWT) con expiración y soporte para Refresh Token" selected>Bearer JWT con expiración (Recomendado)</option>
+                  <option value="Cabecera 'X-API-Key' estática o administrable para cada cliente">API Keys por cliente</option>
+                  <option value="Cookies de sesión HTTP-Only (Seguras contra XSS/CSRF)">Cookies de sesión HTTP-Only</option>
+                  <option value="Acceso libre/público sin autenticación">Pública sin autenticación</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Formato de Respuestas de Error:</label>
+                <select id="grill-opt-errors" class="form-control">
+                  <option value="RFC 7807 (Problem Details: 'type', 'title', 'status', 'detail', 'invalid_params')" selected>RFC 7807 Problem Details (Recomendado)</option>
+                  <option value="JSON uniforme simple: {'success': false, 'error': {'code': '...', 'message': '...'}}">JSON simple uniforme</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="round-accordion">
+            <div class="round-head"><strong>Ronda 3:</strong> Persistencia, Base de Datos y Caché</div>
+            <div class="round-body">
+              <div class="form-group">
+                <label>Motor de Persistencia:</label>
+                <select id="grill-opt-persistence" class="form-control">
+                  <option value="SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)" selected>SQLite3 local con WAL (Recomendado)</option>
+                  <option value="PostgreSQL relacional con soporte para transacciones complejas y extensiones">PostgreSQL relacional</option>
+                  <option value="Almacenamiento en memoria volátil (Dicts/Memory-DB) con opción de volcado JSON">En memoria volátil</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Estrategia de Caché:</label>
+                <select id="grill-opt-caching" class="form-control">
+                  <option value="Caché en memoria local con tiempo de expiración (TTL) y purga automática" selected>Caché en memoria local con TTL (Recomendado)</option>
+                  <option value="Caché distribuida externa Redis con soporte pub/sub">Redis distribuido</option>
+                  <option value="Sin capa de caché (consultas directas a persistencia para el MVP)">Sin caché para MVP</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-grill">Cancelar</button>
+        <button class="btn btn-primary" id="btn-submit-grill">🚀 Generar Discovery y Congelar Contrato</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirm Reset -->
+  <div class="modal-backdrop hidden" id="modal-reset">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>⚠️ Reiniciar Ambiente de la Fábrica</h3>
+          <p class="modal-subtitle">Se limpiará el workspace y el shared_pool para comenzar un nuevo proyecto.</p>
+        </div>
+        <button class="modal-close" id="btn-close-reset">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Esta acción:</p>
+        <ul>
+          <li>Creará un <strong>respaldo automático</strong> de la aplicación actual en <code>exports/</code>.</li>
+          <li>Limpiará <code>environment/workspace/</code> y <code>shared_pool/</code>.</li>
+          <li>Restablecerá <code>workflow_context.json</code> a su estado base inicial.</li>
+        </ul>
+        <p>¿Estás seguro de continuar?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-reset">Cancelar</button>
+        <button class="btn btn-danger" id="btn-confirm-reset">Sí, Respaldar y Reiniciar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast de Notificaciones -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

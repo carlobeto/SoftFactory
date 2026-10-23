@@ -166,13 +166,18 @@ if __name__ == "__main__":
                         help="Ejecuta la sesión interactiva de Grill-Me (Fase 0) para desgranar un requerimiento")
     parser.add_argument("--non-interactive", action="store_true",
                         help="Ejecuta la entrevista utilizando recomendaciones automáticas (Smart Defaults)")
+    parser.add_argument("--ui", action="store_true", help="Inicia el Dashboard Web interactivo en http://localhost:5000")
     parser.add_argument("--status", action="store_true", help="Muestra el estado actual de la fábrica")
     parser.add_argument("--req", help="Requerimiento del usuario para ejecutar o inicializar")
     parser.add_argument("--no-backup", action="store_true", help="No realiza backup automático antes de resetear")
 
     args = parser.parse_args()
 
-    if args.export is not None:
+    if args.ui:
+        venv_py = ROOT_DIR / ".venv" / "bin" / "python3"
+        py_bin = str(venv_py) if venv_py.exists() else sys.executable
+        subprocess.run([py_bin, str(ROOT_DIR / "tools" / "dashboard" / "run.py")])
+    elif args.export is not None:
         target = args.export if args.export != "" else None
         export_application(target_dir=target)
     elif args.reset:
