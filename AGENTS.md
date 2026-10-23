@@ -20,27 +20,42 @@
 
 \## 2. Perfiles de Agentes y Contratos (SOPs)
 
+\### 2.0. Fase 0: Requirements Discovery & Grilling (Elicitación Interactiva)
+
+\* \*\*Perfil y Meta:\*\* Convertir frases iniciales escuetas o ambiguas del usuario (ej. "Construir una API...") en especificaciones y decisiones de diseño consolidadas mediante entrevistas por rondas (Design Tree Frontier / Grill-Me Protocol).
+
+\* \*\*Herramientas autorizadas:\*\* Entrevistador interactivo (`tools/requirements_interviewer.py`), lectura del contexto del proyecto y skills `grill-me`, `api-design`, `domain-modeling`.
+
+\* \*\*Entrada (Input):\*\* Frase inicial o requerimiento semilla del usuario.
+
+\* \*\*Salida (Contrato de Entrega - `shared_pool/01_prd/DISCOVERY_NOTES.md`):\*\*
+  1. Matriz de decisiones de diseño congeladas (estilo de API, seguridad, persistencia, caché, validaciones).
+  2. Entidades clave del dominio y modelo de recursos.
+  3. Borrador de especificación de endpoints/interfaces.
+  4. Historias de usuario con criterios de aceptación ejecutables (formato Gherkin: Given-When-Then).
+  5. Registro preliminar de decisiones arquitectónicas (ADRs).
+
 
 
 \### 2.1. Product Manager (PM)
 
-\* \*\*Perfil y Meta:\*\* Analizar los requerimientos del usuario y objetivos de negocio para traducirlos en especificaciones funcionales claras.
+\* \*\*Perfil y Meta:\*\* Analizar los requerimientos del usuario y objetivos de negocio para traducirlos en especificaciones funcionales claras y congelar el contrato funcional.
 
-\* \*\*Herramientas autorizadas:\*\* Búsqueda web y lectura de contexto inicial.
+\* \*\*Herramientas autorizadas:\*\* Búsqueda web, lectura de contexto inicial y lectura de `DISCOVERY_NOTES.md`.
 
-\* \*\*Entrada (Input):\*\* Solicitud inicial del usuario (prompt de una línea o descripción del problema).
+\* \*\*Entrada (Input):\*\* Solicitud del usuario enriquecida por `DISCOVERY_NOTES.md`.
 
 \* \*\*Salida (Contrato de Entrega - `PRD.md`):\*\*
 
 &#x20; 1. Metas del Producto (Product Goals).
 
-&#x20; 2. Historias de Usuario (User Stories).
+&#x20; 2. Historias de Usuario (User Stories con criterios de aceptación Gherkin).
 
 &#x20; 3. Análisis de Requerimientos y Pool de Prioridades (P0, P1).
 
-&#x20; 4. Boceto de Diseño UI (UI Design draft).
+&#x20; 4. Boceto de Diseño UI / API Contract Draft (OpenAPI spec draft).
 
-&#x20; 5. Sección `## Anything UNCLEAR` (Debe declarar explícitamente si todo está claro o qué dudas quedan).
+&#x20; 5. Sección `## Anything UNCLEAR` (Debe declarar explícitamente si todo está resuelto mediante el Grilling previo).
 
 
 
@@ -110,13 +125,13 @@
 
 \## 3. Flujo Secuencial de la Cadena de Montaje
 
-1\. `\[Usuario]` -> Entrega requerimiento -> `\[Product Manager]`
+0\. `\[Usuario]` -> Frase inicial / requerimiento semilla -> `\[Fase 0: Requirements Discovery & Grilling]` (Entrevista interactiva por rondas) -> Publica `DISCOVERY\_NOTES.md`
 
-2\. `\[Product Manager]` -> Publica `PRD.md` -> `\[Arquitecto]`
+1\. `\[Product Manager]` -> Lee requerimiento y `DISCOVERY\_NOTES.md` -> Publica `PRD.md` sin ambigüedades -> `\[Arquitecto]`
 
-3\. `\[Arquitecto]` -> Publica `SYSTEM\_DESIGN.md` y `TASKS.md` -> `\[Programador]`
+2\. `\[Arquitecto]` -> Publica `SYSTEM\_DESIGN.md` y `TASKS.md` -> `\[Programador]`
 
-4\. `\[Programador]` -> Propone `CHANGE\_PLAN.md` (Se congela el contrato) -> Ejecuta código y genera `diff` -> `\[QA / Testeador]`
+3\. `\[Programador]` -> Propone `CHANGE\_PLAN.md` (Se congela el contrato) -> Ejecuta código y genera `diff` -> `\[QA / Testeador]`
 
-5\. `\[QA / Testeador]` -> Audita límites y ejecuta pruebas -> Si falla, devuelve `QA\_REPORT.md` al `\[Programador]` para iteración; si aprueba, finaliza el ciclo.
+4\. `\[QA / Testeador]` -> Audita límites y ejecuta pruebas -> Si falla, devuelve `QA\_REPORT.md` al `\[Programador]` para iteración; si aprueba, finaliza el ciclo.
 

@@ -83,6 +83,7 @@ def export_application(target_dir=None, make_tar=True, include_artifacts=True):
         docs_dir.mkdir(parents=True, exist_ok=True)
 
         artifact_sources = [
+            (SHARED_POOL_DIR / "01_prd" / "DISCOVERY_NOTES.md", "00_DISCOVERY_NOTES.md"),
             (SHARED_POOL_DIR / "01_prd" / "PRD.md", "01_PRD.md"),
             (SHARED_POOL_DIR / "02_system_design" / "SYSTEM_DESIGN.md", "02_SYSTEM_DESIGN.md"),
             (SHARED_POOL_DIR / "02_system_design" / "TASKS.md", "02_TASKS.md"),
@@ -234,6 +235,7 @@ def print_status():
     print(f"Proyecto actual: {metadata.get('project_name', 'N/A')}")
     print(f"Estado QA/Fábrica: {metadata.get('status', 'N/A')}")
 
+    discovery_exists = (SHARED_POOL_DIR / "01_prd" / "DISCOVERY_NOTES.md").exists()
     prd_exists = (SHARED_POOL_DIR / "01_prd" / "PRD.md").exists()
     design_exists = (SHARED_POOL_DIR / "02_system_design" / "SYSTEM_DESIGN.md").exists()
     tasks_exists = (SHARED_POOL_DIR / "02_system_design" / "TASKS.md").exists()
@@ -241,6 +243,7 @@ def print_status():
     qa_exists = (SHARED_POOL_DIR / "04_qa_reports" / "QA_REPORT.md").exists()
 
     print("\nArtefactos del Shared Pool:")
+    print(f"  [0] DISCOVERY_NOTES.md:  {'PRESENTE' if discovery_exists else 'VACÍO'}")
     print(f"  [1] PRD.md:              {'PRESENTE' if prd_exists else 'VACÍO'}")
     print(f"  [2] SYSTEM_DESIGN.md:    {'PRESENTE' if design_exists else 'VACÍO'}")
     print(f"  [2] TASKS.md:            {'PRESENTE' if tasks_exists else 'VACÍO'}")

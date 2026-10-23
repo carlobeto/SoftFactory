@@ -9,5 +9,6 @@ agent_profile:
     - "Alinear los objetivos del producto con el WORKFLOW_CONTEXT global."
   authorized_tools:
     - "web_search"
+    - "read_discovery_notes"
   reasoning_style: "ReAct"
   output_target: "shared_pool/01_prd/PRD.md"

@@ -21,6 +21,7 @@ try:
         init_new_project,
         print_status,
     )
+    from tools.requirements_interviewer import run_grill_interview
 except ImportError:
     sys.path.append(str(ROOT_DIR))
     from tools.factory_manager import (
@@ -29,6 +30,7 @@ except ImportError:
         init_new_project,
         print_status,
     )
+    from tools.requirements_interviewer import run_grill_interview
 
 
 def check_environment():
@@ -41,11 +43,23 @@ def check_environment():
     print("[Orchestrator] Entorno verificado correctamente.")
 
 
+def run_discovery(user_requirement: str, interactive: bool = True):
+    """Fase 0: Requirements Discovery & Grilling según la metodología de AI Hero."""
+    print("\n=== [FASE 0] Requirements Discovery & Grilling (Frontier Protocol) ===")
+    discovery_path, _ = run_grill_interview(user_requirement, interactive=interactive)
+    print(f"-> Elicitación completada y decisiones congeladas en: {discovery_path}")
+    return discovery_path
+
+
 def run_product_manager(user_requirement: str):
     """Fase 1: El Product Manager analiza el requerimiento y genera/valida el PRD.md."""
     print("\n=== [FASE 1] Product Manager: Analizando requerimientos y generando PRD ===")
     prd_path = SHARED_POOL / "01_prd" / "PRD.md"
+    discovery_path = SHARED_POOL / "01_prd" / "DISCOVERY_NOTES.md"
+
     print(f"-> Requerimiento: {user_requirement}")
+    if discovery_path.exists():
+        print(f"-> Incorporando especificación previa de Discovery: {discovery_path}")
     print(f"-> Procesando con SOP de Product Manager...")
 
     if not prd_path.exists():
@@ -148,6 +162,10 @@ if __name__ == "__main__":
     parser.add_argument("--export", nargs="?", const="", help="Rescata/exporta la aplicación actual a exports/ o ruta indicada")
     parser.add_argument("--reset", action="store_true", help="Limpia y reinicia el ambiente de la fábrica")
     parser.add_argument("--init", metavar="PROJECT_NAME", help="Inicializa el entorno para una nueva aplicación")
+    parser.add_argument("--interview", "--grill", nargs="?", const="", metavar="PROMPT",
+                        help="Ejecuta la sesión interactiva de Grill-Me (Fase 0) para desgranar un requerimiento")
+    parser.add_argument("--non-interactive", action="store_true",
+                        help="Ejecuta la entrevista utilizando recomendaciones automáticas (Smart Defaults)")
     parser.add_argument("--status", action="store_true", help="Muestra el estado actual de la fábrica")
     parser.add_argument("--req", help="Requerimiento del usuario para ejecutar o inicializar")
     parser.add_argument("--no-backup", action="store_true", help="No realiza backup automático antes de resetear")
@@ -161,6 +179,12 @@ if __name__ == "__main__":
         reset_environment(backup_first=not args.no_backup)
     elif args.init:
         init_new_project(args.init, requirement=args.req, backup_current=not args.no_backup)
+        if args.interview is not None:
+            prompt = args.interview if args.interview != "" else (args.req or f"Construir el sistema {args.init}")
+            run_discovery(prompt, interactive=not args.non_interactive)
+    elif args.interview is not None:
+        prompt = args.interview if args.interview != "" else (args.req or get_pending_requirement())
+        run_discovery(prompt, interactive=not args.non_interactive)
     elif args.status:
         print_status()
     else:
