@@ -27,6 +27,11 @@ from tools.factory_manager import (
     init_new_project,
     reset_environment,
 )
+from tools.dashboard.agent_runners import (
+    generate_prd_artifact,
+    generate_system_design_artifact,
+    run_qa_audit_and_tests,
+)
 from tools.requirements_interviewer import generate_discovery_notes, run_grill_interview
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -64,6 +69,8 @@ class ExportRequest(BaseModel):
 class InterviewRequest(BaseModel):
     prompt: str
     answers: Optional[dict[str, str]] = None
+    reset_first: bool = True
+    project_name: Optional[str] = None
 
 
 # --- Endpoints de Estado y Artefactos Activos ---
@@ -212,8 +219,12 @@ def export_application_endpoint(req: ExportRequest):
 
 @app.post("/api/actions/interview")
 def run_interview_endpoint(req: InterviewRequest):
-    """Ejecuta la elicitación de requerimientos Grill-Me."""
+    """Ejecuta la elicitación de requerimientos Grill-Me y reinicia el entorno si se solicita."""
     try:
+        if req.reset_first:
+            proj_name = req.project_name or "nueva_app"
+            init_new_project(proj_name, requirement=req.prompt, backup_current=True)
+
         if req.answers:
             output_file = SHARED_POOL / "01_prd" / "DISCOVERY_NOTES.md"
             output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -222,6 +233,46 @@ def run_interview_endpoint(req: InterviewRequest):
         else:
             disc_file, answers = run_grill_interview(req.prompt, interactive=False)
             return {"success": True, "answers": answers, "file": str(disc_file)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/actions/generate/prd")
+def generate_prd_endpoint():
+    """Fase 1: Genera el Documento de Requerimientos de Producto (PRD.md)."""
+    try:
+        prd_file = generate_prd_artifact()
+        return {"success": True, "message": "PRD.md generado con éxito por el Product Manager.", "file": str(prd_file)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/actions/generate/system_design")
+def generate_system_design_endpoint():
+    """Fase 2: Genera la Arquitectura del Sistema (SYSTEM_DESIGN.md y TASKS.md)."""
+    try:
+        design_file, tasks_file = generate_system_design_artifact()
+        return {
+            "success": True,
+            "message": "Especificación de arquitectura y tareas generadas con éxito por el Arquitecto.",
+            "design_file": str(design_file),
+            "tasks_file": str(tasks_file),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/actions/run_qa")
+def run_qa_endpoint():
+    """Fase 4: Ejecuta la auditoría hostil de límites y la suite de tests dinámicos."""
+    try:
+        approved, qa_file = run_qa_audit_and_tests()
+        status_label = "APROBADO" if approved else "RECHAZADO"
+        return {
+            "success": approved,
+            "message": f"Auditoría de QA completada. Dictamen: {status_label}",
+            "file": str(qa_file),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

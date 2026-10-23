@@ -38,8 +38,8 @@
       </div>
 
       <div class="header-actions">
-        <button id="btn-open-grill" class="btn btn-primary" title="Iniciar sesión de descubrimiento con Grill-Me">
-          ✨ Nueva App (Grill-Me)
+        <button id="btn-open-new-app" class="btn btn-primary" title="Iniciar un nuevo proyecto con asistente Grill-Me">
+          ✨ Nueva App
         </button>
         <button id="btn-export-app" class="btn btn-secondary" title="Exportar y empaquetar aplicación actual">
           📦 Exportar
@@ -123,7 +123,7 @@
           </div>
         </div>
 
-        <!-- Lista de Ramas Git (visible cuando se selecciona pestaña Git) -->
+        <!-- Lista de Ramas Git -->
         <div class="sidebar-section git-branches-container hidden" id="git-branches-section">
           <h2 class="sidebar-heading">Proyectos en Git</h2>
           <div class="branch-list" id="branch-list">
@@ -170,25 +170,34 @@
 
       <!-- Panel Central: Visor de Documentos y Diffs -->
       <section class="content-viewer-pane">
-        <!-- Barra de Estado del Visor -->
+        <!-- Barra Superior del Visor -->
         <div class="viewer-top-bar">
           <div class="breadcrumb-container" id="viewer-breadcrumbs">
             <span class="bc-origin">Workspace Activo</span> / 
             <span class="bc-target" id="bc-filename">DISCOVERY_NOTES.md</span>
           </div>
 
-          <!-- Acciones de Vista (Renderizado vs Código Plano vs Diff) -->
           <div class="viewer-controls">
             <div class="view-mode-switch">
               <button class="view-mode-btn active" id="btn-view-rendered">Formato Enriquecido</button>
               <button class="view-mode-btn" id="btn-view-raw">Texto Markdown</button>
-              <button class="view-mode-btn" id="btn-view-diff" style="display: none;">Diferencial Git</button>
             </div>
             <button id="btn-copy-content" class="btn btn-secondary-sm" title="Copiar contenido al portapapeles">📋 Copiar</button>
           </div>
         </div>
 
-        <!-- Banner de Rama Histórica (se muestra al ver una rama que no es la activa) -->
+        <!-- Barra de Acción de la Etapa (Permite Generar o Regenerar Documentos) -->
+        <div class="stage-action-toolbar" id="stage-action-toolbar">
+          <div class="stage-action-info">
+            <span class="stage-action-tag" id="stage-action-tag">Fase 1: Product Manager</span>
+            <span class="stage-action-desc" id="stage-action-desc">Genera el PRD.md a partir de las decisiones congeladas en Discovery.</span>
+          </div>
+          <button class="btn btn-accent-action" id="btn-stage-action">
+            🚀 Generar Documento de Esta Etapa
+          </button>
+        </div>
+
+        <!-- Banner de Rama Histórica Git -->
         <div class="git-branch-banner hidden" id="git-branch-banner">
           <div class="banner-info">
             <span class="banner-badge">Modo Inspección Git</span>
@@ -199,108 +208,169 @@
           </button>
         </div>
 
-        <!-- Contenedor del Documento -->
+        <!-- Contenedor del Documento Renderizado -->
         <div class="document-render-container" id="document-render-container">
           <div class="markdown-body" id="markdown-view">
-            <!-- Contenido renderizado con marked y mermaid -->
+            <!-- Contenido renderizado -->
           </div>
           <pre class="raw-code-body hidden" id="raw-view"><code id="raw-code"></code></pre>
+        </div>
+
+        <!-- Banner Inferior de Sugerencia / Siguiente Paso -->
+        <div class="next-step-banner hidden" id="next-step-banner">
+          <div class="next-step-content">
+            <span class="next-step-icon">🎯</span>
+            <div class="next-step-texts">
+              <strong id="next-step-title">Siguiente Paso Recomendado:</strong>
+              <p id="next-step-desc">Avanza a la siguiente etapa para continuar con el ciclo de vida.</p>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="btn-next-step">
+            ➡️ Avanzar a la Siguiente Etapa
+          </button>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- MODAL: Grill-Me Interactive Interview -->
+  <!-- MODAL 1: Advertencia de Inicio de Nuevo Proyecto -->
+  <div class="modal-backdrop hidden" id="modal-new-app-confirm">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>⚠️ Comenzar un Nuevo Proyecto</h3>
+          <p class="modal-subtitle">Confirmación de limpieza y respaldo de seguridad.</p>
+        </div>
+        <button class="modal-close" id="btn-close-new-confirm">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Al iniciar un nuevo proyecto:</p>
+        <ul style="margin: 12px 0 12px 20px; line-height: 1.6;">
+          <li>Se creará una <strong>copia de seguridad automática</strong> del proyecto actual en <code>exports/</code>.</li>
+          <li>Se limpiará el espacio de trabajo activo y los documentos anteriores para <strong>evitar mezclar requerimientos</strong>.</li>
+          <li>Se iniciará el <strong>Asistente por Rondas (Grill-Me)</strong> para definir la arquitectura del nuevo sistema.</li>
+        </ul>
+        <p>¿Deseas respaldar y continuar?</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-new-confirm">Cancelar</button>
+        <button class="btn btn-primary" id="btn-accept-new-confirm">Continuar al Asistente Grill-Me ➔</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 2: Grill-Me Interactive Wizard (Por Rondas de la Frontera) -->
   <div class="modal-backdrop hidden" id="modal-grill">
     <div class="modal-dialog modal-lg">
       <div class="modal-header">
         <div class="modal-title-group">
-          <h3>✨ Requirements Discovery & Grilling (Fase 0)</h3>
-          <p class="modal-subtitle">Desgrana tu idea inicial mediante el protocolo de árbol de decisiones antes de generar el PRD.</p>
+          <h3>✨ Asistente de Elicitación Grill-Me (Fase 0)</h3>
+          <p class="modal-subtitle">Define las decisiones arquitectónicas por rondas progresivas.</p>
         </div>
         <button class="modal-close" id="btn-close-grill">&times;</button>
       </div>
 
       <div class="modal-body">
-        <div class="form-group">
-          <label for="grill-prompt">Requerimiento Semilla (Frase inicial):</label>
-          <input type="text" id="grill-prompt" class="form-control" placeholder="Ej: Construir una API para gestionar clientes y reservas con autenticación JWT">
+        <!-- Indicador de Progreso de Rondas -->
+        <div class="wizard-progress-bar">
+          <div class="wizard-step active" id="wstep-1">1. Semilla & Tipo de Interfaz</div>
+          <div class="wizard-step" id="wstep-2">2. Dominio & Seguridad</div>
+          <div class="wizard-step" id="wstep-3">3. Persistencia & Caché</div>
+          <div class="wizard-step" id="wstep-4">4. Confirmación</div>
         </div>
 
-        <div class="grill-rounds-preview">
-          <div class="round-accordion">
-            <div class="round-head"><strong>Ronda 1:</strong> Estilo de API, Protocolo y Entidades del Dominio</div>
-            <div class="round-body">
-              <div class="form-group">
-                <label>Estilo Arquitectónico:</label>
-                <select id="grill-opt-style" class="form-control">
-                  <option value="RESTful API sobre HTTP con payloads JSON y códigos de estado estándar" selected>RESTful API JSON (Recomendado)</option>
-                  <option value="FastAPI asíncrono con esquemas Pydantic y documentación OpenAPI automática">FastAPI (Python) asíncrono</option>
-                  <option value="gRPC con Protobuf para alta performance y baja latencia">gRPC con Protobuf</option>
-                  <option value="CLI interactiva con comandos estructurados">Herramienta CLI interactiva</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Entidades Principales:</label>
-                <input type="text" id="grill-opt-entities" class="form-control" placeholder="Ej: Clientes, Reservas, Pagos" value="Clientes, Reservas, Pagos">
-              </div>
-            </div>
+        <!-- RONDA 1 -->
+        <div class="wizard-pane active" id="wpane-1">
+          <div class="form-group">
+            <label for="grill-proj-name">Nombre Clave del Proyecto (slug):</label>
+            <input type="text" id="grill-proj-name" class="form-control" placeholder="Ej: gestion_pedidos" value="nueva_aplicacion">
           </div>
 
-          <div class="round-accordion">
-            <div class="round-head"><strong>Ronda 2:</strong> Seguridad, Autenticación y Manejo de Errores</div>
-            <div class="round-body">
-              <div class="form-group">
-                <label>Esquema de Seguridad:</label>
-                <select id="grill-opt-auth" class="form-control">
-                  <option value="Bearer Token (JWT) con expiración y soporte para Refresh Token" selected>Bearer JWT con expiración (Recomendado)</option>
-                  <option value="Cabecera 'X-API-Key' estática o administrable para cada cliente">API Keys por cliente</option>
-                  <option value="Cookies de sesión HTTP-Only (Seguras contra XSS/CSRF)">Cookies de sesión HTTP-Only</option>
-                  <option value="Acceso libre/público sin autenticación">Pública sin autenticación</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Formato de Respuestas de Error:</label>
-                <select id="grill-opt-errors" class="form-control">
-                  <option value="RFC 7807 (Problem Details: 'type', 'title', 'status', 'detail', 'invalid_params')" selected>RFC 7807 Problem Details (Recomendado)</option>
-                  <option value="JSON uniforme simple: {'success': false, 'error': {'code': '...', 'message': '...'}}">JSON simple uniforme</option>
-                </select>
-              </div>
-            </div>
+          <div class="form-group">
+            <label for="grill-prompt">Requerimiento Inicial (¿Qué deseas construir?):</label>
+            <input type="text" id="grill-prompt" class="form-control" placeholder="Ej: Construir una API para gestionar inventario de repuestos con autenticación JWT">
           </div>
 
-          <div class="round-accordion">
-            <div class="round-head"><strong>Ronda 3:</strong> Persistencia, Base de Datos y Caché</div>
-            <div class="round-body">
-              <div class="form-group">
-                <label>Motor de Persistencia:</label>
-                <select id="grill-opt-persistence" class="form-control">
-                  <option value="SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)" selected>SQLite3 local con WAL (Recomendado)</option>
-                  <option value="PostgreSQL relacional con soporte para transacciones complejas y extensiones">PostgreSQL relacional</option>
-                  <option value="Almacenamiento en memoria volátil (Dicts/Memory-DB) con opción de volcado JSON">En memoria volátil</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label>Estrategia de Caché:</label>
-                <select id="grill-opt-caching" class="form-control">
-                  <option value="Caché en memoria local con tiempo de expiración (TTL) y purga automática" selected>Caché en memoria local con TTL (Recomendado)</option>
-                  <option value="Caché distribuida externa Redis con soporte pub/sub">Redis distribuido</option>
-                  <option value="Sin capa de caché (consultas directas a persistencia para el MVP)">Sin caché para MVP</option>
-                </select>
-              </div>
+          <div class="form-group">
+            <label for="grill-opt-platform">❓ Ronda 1: ¿Qué tipo de plataforma o interfaz tendrá la aplicación?</label>
+            <select id="grill-opt-platform" class="form-control">
+              <option value="web_rest" selected>🌐 API RESTful Web / Backend (FastAPI / HTTP JSON) — Recomendado</option>
+              <option value="web_spa">💻 Aplicación Web Fullstack (Frontend SPA Web + Backend API)</option>
+              <option value="win_gui">🖥️ Aplicación de Escritorio / Windows GUI (Ventana nativa Tkinter / PyQt)</option>
+              <option value="cli_app">⌨️ Herramienta de Terminal CLI Interactiva (Consola de comandos)</option>
+              <option value="microservice">⚙️ Microservicio Interno (gRPC / Cola de Mensajes)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- RONDA 2 -->
+        <div class="wizard-pane hidden" id="wpane-2">
+          <div class="form-group">
+            <label for="grill-opt-entities">❓ Ronda 2.1: Entidades Principales del Dominio (separadas por coma):</label>
+            <input type="text" id="grill-opt-entities" class="form-control" placeholder="Ej: Productos, Clientes, Facturas" value="Productos, Clientes, Facturas">
+          </div>
+
+          <div class="form-group">
+            <label for="grill-opt-auth">❓ Ronda 2.2: ¿Qué esquema de autenticación y seguridad se implementará?</label>
+            <select id="grill-opt-auth" class="form-control">
+              <option value="Bearer Token (JWT) con expiración y soporte para Refresh Token" selected>Bearer Token (JWT) — Recomendado</option>
+              <option value="Cabecera 'X-API-Key' estática o administrable para cada cliente">API Keys por cliente</option>
+              <option value="Cookies de sesión HTTP-Only (Seguras contra XSS/CSRF)">Cookies de sesión HTTP-Only</option>
+              <option value="Acceso libre/público sin autenticación (sólo para endpoints informativos o MVP)">Pública sin autenticación</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="grill-opt-errors">❓ Ronda 2.3: Formato de Respuestas de Error:</label>
+            <select id="grill-opt-errors" class="form-control">
+              <option value="RFC 7807 (Problem Details: 'type', 'title', 'status', 'detail', 'invalid_params')" selected>RFC 7807 Problem Details — Recomendado</option>
+              <option value="JSON uniforme simple: {'success': false, 'error': {'code': '...', 'message': '...'}}">JSON simple uniforme</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- RONDA 3 -->
+        <div class="wizard-pane hidden" id="wpane-3">
+          <div class="form-group">
+            <label for="grill-opt-persistence">❓ Ronda 3.1: Motor de Base de Datos y Persistencia:</label>
+            <select id="grill-opt-persistence" class="form-control">
+              <option value="SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)" selected>SQLite3 local con WAL activado — Recomendado</option>
+              <option value="PostgreSQL relacional con soporte para transacciones complejas">PostgreSQL relacional</option>
+              <option value="Archivos locales JSON / Archivos estructurados en disco">Archivos locales en disco</option>
+              <option value="Almacenamiento en memoria volátil (Dicts/Memory-DB)">En memoria volátil</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="grill-opt-caching">❓ Ronda 3.2: Estrategia de Caché y Optimización:</label>
+            <select id="grill-opt-caching" class="form-control">
+              <option value="Caché en memoria local con tiempo de expiración (TTL) y purga automática" selected>Caché en memoria local con TTL — Recomendado</option>
+              <option value="Caché distribuida externa Redis con soporte pub/sub">Redis distribuido</option>
+              <option value="Sin capa de caché (consultas directas a persistencia para el MVP)">Sin caché para MVP</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- RONDA 4 (Resumen) -->
+        <div class="wizard-pane hidden" id="wpane-4">
+          <div class="summary-box">
+            <h4>📋 Resumen del Contrato a Congelar</h4>
+            <div id="grill-summary-content" style="margin-top: 10px; font-size: 0.85rem; line-height: 1.8;">
+              <!-- Llenado dinámicamente -->
             </div>
           </div>
         </div>
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="btn-cancel-grill">Cancelar</button>
-        <button class="btn btn-primary" id="btn-submit-grill">🚀 Generar Discovery y Congelar Contrato</button>
+        <button class="btn btn-secondary" id="btn-wizard-prev" disabled>Atrás</button>
+        <button class="btn btn-primary" id="btn-wizard-next">Siguiente Ronda ➔</button>
+        <button class="btn btn-accent-action hidden" id="btn-wizard-submit">🚀 Congelar Contrato y Generar Discovery</button>
       </div>
     </div>
   </div>
 
-  <!-- MODAL: Confirm Reset -->
+  <!-- MODAL 3: Confirm Reset -->
   <div class="modal-backdrop hidden" id="modal-reset">
     <div class="modal-dialog">
       <div class="modal-header">
@@ -312,7 +382,7 @@
       </div>
       <div class="modal-body">
         <p>Esta acción:</p>
-        <ul>
+        <ul style="margin: 12px 0 12px 20px; line-height: 1.6;">
           <li>Creará un <strong>respaldo automático</strong> de la aplicación actual en <code>exports/</code>.</li>
           <li>Limpiará <code>environment/workspace/</code> y <code>shared_pool/</code>.</li>
           <li>Restablecerá <code>workflow_context.json</code> a su estado base inicial.</li>
@@ -326,7 +396,7 @@
     </div>
   </div>
 
-  <!-- Toast de Notificaciones -->
+  <!-- Toast Container -->
   <div class="toast-container" id="toast-container"></div>
 
   <script src="/static/js/dashboard.js"></script>

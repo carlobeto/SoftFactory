@@ -1,7 +1,0 @@
-PROYECTO: Construir una API para gestionar tareas y proyectos
-REQUERIMIENTO DESCUBIERTO (GRILL-ME):
-- Arquitectura: RESTful API sobre HTTP con payloads JSON y códigos de estado estándar
-- Entidades: Tareas, Proyectos, Etiquetas
-- Autenticación: Bearer Token (JWT) con expiración y soporte para Refresh Token
-- Persistencia: SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)
-- Errores: RFC 7807 (Problem Details: 'type', 'title', 'status', 'detail', 'invalid_params')

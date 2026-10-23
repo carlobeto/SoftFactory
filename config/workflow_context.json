@@ -2,7 +2,7 @@
     "WORKFLOW_CONTEXT": {
         "project_metadata": {
             "project_name": "nueva_aplicacion",
-            "status": "INITIALIZED",
+            "status": "QA_APPROVED",
             "tech_stack_selection_mode": "AGENT_DECIDED"
         },
         "branch_configuration": {
@@ -10,18 +10,16 @@
             "hotfixes_from": "main"
         },
         "project_architecture": {
-            "_populated_by": "Architect Agent",
-            "pattern": null,
-            "primary_language": null,
-            "framework": null,
-            "database_or_storage": null,
-            "testing_framework": null
+            "pattern": "Layered Service-Repository Pattern",
+            "primary_language": "Python 3.11+",
+            "framework": "Standard Library / Modular Service",
+            "database_or_storage": "SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)",
+            "testing_framework": "unittest"
         },
         "mandatory_ci_checks": {
-            "_populated_by": "Architect Agent",
-            "unit_test_command": null,
-            "linter_command": null,
-            "static_analysis_command": null,
+            "unit_test_command": "python3 -m unittest discover -s environment/workspace/tests -t environment/workspace -p 'test_*.py' -v",
+            "linter_command": "python3 -m py_compile environment/workspace/main.py environment/workspace/app/*.py environment/workspace/tests/*.py",
+            "static_analysis_command": "python3 -m py_compile environment/workspace/main.py",
             "formatter_command": null
         },
         "docker_environment": {
