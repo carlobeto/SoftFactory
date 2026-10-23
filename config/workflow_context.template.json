@@ -1,0 +1,50 @@
+{
+    "WORKFLOW_CONTEXT": {
+        "project_metadata": {
+            "project_name": "nueva_aplicacion",
+            "status": "INITIALIZED",
+            "tech_stack_selection_mode": "AGENT_DECIDED"
+        },
+        "branch_configuration": {
+            "features_from": "develop",
+            "hotfixes_from": "main"
+        },
+        "project_architecture": {
+            "_populated_by": "Architect Agent",
+            "pattern": null,
+            "primary_language": null,
+            "framework": null,
+            "database_or_storage": null,
+            "testing_framework": null
+        },
+        "mandatory_ci_checks": {
+            "_populated_by": "Architect Agent",
+            "unit_test_command": null,
+            "linter_command": null,
+            "static_analysis_command": null,
+            "formatter_command": null
+        },
+        "docker_environment": {
+            "_populated_by": "Architect Agent",
+            "dockerfile_path": "environment/Dockerfile",
+            "start_command": null,
+            "exec_prefix": null,
+            "sandbox_isolation": true
+        },
+        "deployment_method": {
+            "_populated_by": "Architect Agent",
+            "strategy": null
+        },
+        "file_boundaries_template": {
+            "allowed_to_touch": [
+                "environment/workspace/*"
+            ],
+            "strictly_forbidden": [
+                "config/*",
+                "agents/*",
+                "shared_pool/01_prd/*",
+                "shared_pool/04_qa_reports/*"
+            ]
+        }
+    }
+}
