@@ -32,8 +32,8 @@ def main():
     print("  🚀 SOFTFACTORY CONTROL PLANE DASHBOARD")
     print(f"  Servidor activo en: http://localhost:{port}")
     print("  Presiona CTRL+C para detener el servidor.")
-    print("=" * 70)
-    uvicorn.run("tools.dashboard.api:app", host=host, port=port, reload=False, log_level="info")
+    dashboard_dir = str(ROOT_DIR / "tools" / "dashboard")
+    uvicorn.run("tools.dashboard.api:app", host=host, port=port, reload=True, reload_dirs=[dashboard_dir], log_level="info")
 
 
 if __name__ == "__main__":

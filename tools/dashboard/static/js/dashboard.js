@@ -221,18 +221,18 @@ function updateNextStepSuggestion() {
     dom.nextStepTitle.textContent = 'Siguiente Paso: Fase 1 (Product Manager)';
     dom.nextStepDesc.textContent = 'El Discovery está congelado. Genera el PRD.md con las historias de usuario y criterios Gherkin.';
     dom.btnNextStep.textContent = '➡️ Generar PRD (Product Manager)';
-    dom.btnNextStep.onclick = () => {
+    dom.btnNextStep.onclick = async () => {
+      await triggerStageGeneration('/api/actions/generate/prd', 'PRD.md generado con éxito por el Product Manager.');
       loadArtifactContent('prd');
-      triggerStageGeneration('/api/actions/generate/prd', 'PRD.md generado con éxito.');
     };
     dom.nextStepBanner.classList.remove('hidden');
   } else if (!s.system_design) {
     dom.nextStepTitle.textContent = 'Siguiente Paso: Fase 2 (Arquitecto de Software)';
     dom.nextStepDesc.textContent = 'El PRD está aprobado. Genera la especificación técnica (SYSTEM_DESIGN.md) y el desglose de tareas.';
     dom.btnNextStep.textContent = '➡️ Diseñar Arquitectura (Arquitecto)';
-    dom.btnNextStep.onclick = () => {
+    dom.btnNextStep.onclick = async () => {
+      await triggerStageGeneration('/api/actions/generate/system_design', 'Arquitectura generada con éxito por el Arquitecto.');
       loadArtifactContent('system_design');
-      triggerStageGeneration('/api/actions/generate/system_design', 'Arquitectura generada con éxito.');
     };
     dom.nextStepBanner.classList.remove('hidden');
   } else if (!s.patch) {
@@ -245,9 +245,9 @@ function updateNextStepSuggestion() {
     dom.nextStepTitle.textContent = 'Siguiente Paso: Fase 4 (QA & Hostile Auditor)';
     dom.nextStepDesc.textContent = 'Código implementado. Ejecuta la auditoría hostil y la suite de pruebas unitarias.';
     dom.btnNextStep.textContent = '🛡️ Ejecutar Auditoría de QA';
-    dom.btnNextStep.onclick = () => {
+    dom.btnNextStep.onclick = async () => {
+      await triggerStageGeneration('/api/actions/run_qa', 'Auditoría de QA y suite de pruebas ejecutadas.');
       loadArtifactContent('qa_report');
-      triggerStageGeneration('/api/actions/run_qa', 'Auditoría de QA ejecutada.');
     };
     dom.nextStepBanner.classList.remove('hidden');
   } else {
@@ -284,6 +284,10 @@ function updateStageActionBar(artifactKey) {
 async function triggerStageGeneration(endpoint, successMsg) {
   dom.btnStageAction.disabled = true;
   dom.btnStageAction.textContent = 'Procesando Etapa...';
+  if (dom.btnNextStep) {
+    dom.btnNextStep.disabled = true;
+    dom.btnNextStep.textContent = 'Procesando...';
+  }
 
   try {
     const res = await fetch(endpoint, { method: 'POST' });
@@ -297,6 +301,9 @@ async function triggerStageGeneration(endpoint, successMsg) {
     showToast(err.message, 'error');
   } finally {
     dom.btnStageAction.disabled = false;
+    if (dom.btnNextStep) dom.btnNextStep.disabled = false;
+    updateStageActionBar(state.selectedArtifact);
+    updateNextStepSuggestion();
   }
 }
 
