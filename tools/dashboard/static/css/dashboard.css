@@ -1146,6 +1146,49 @@ body {
   border-color: rgba(16, 185, 129, 0.4);
 }
 
+/* Estado Bloqueado y Botones Deshabilitados por Gobernanza */
+button:disabled, .btn:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  filter: grayscale(0.4) !important;
+  box-shadow: none !important;
+  pointer-events: auto !important;
+}
+
+.step-card.locked {
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  cursor: not-allowed;
+}
+
+.artifact-tree-badge {
+  margin-left: auto;
+  font-size: 0.65rem;
+  padding: 1px 7px;
+  border-radius: 8px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.badge-pending-mini {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.badge-review-mini {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.badge-approved-mini {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
 /* Multi-Project Hub Styles */
 .projects-hub-header {
   display: flex;

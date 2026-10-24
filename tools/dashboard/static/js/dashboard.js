@@ -227,34 +227,128 @@ async function loadStatus() {
     updateStepperBadges(state.artifactsStatus, state.humanApprovals);
     renderWorkspaceFiles(data.workspace_files);
     updateNextStepSuggestion();
+    updateStageActionBar(state.selectedArtifact);
     await loadGitOverview();
   } catch (err) {
     console.error('Error cargando estado:', err);
   }
 }
 
+const STAGE_DEPENDENCIES = {
+  discovery_notes: {
+    approvalKey: 'discovery_notes',
+    prevApprovalKey: null,
+    prevArtifactKey: null,
+    prevName: null,
+  },
+  delta_requirement: {
+    approvalKey: null,
+    prevApprovalKey: null,
+    prevArtifactKey: null,
+    prevName: null,
+  },
+  prd: {
+    approvalKey: 'prd',
+    prevApprovalKey: 'discovery_notes',
+    prevArtifactKey: 'discovery_notes',
+    prevName: 'Etapa 1 (Discovery)',
+  },
+  system_design: {
+    approvalKey: 'system_design',
+    prevApprovalKey: 'prd',
+    prevArtifactKey: 'prd',
+    prevName: 'Etapa 2 (PRD)',
+  },
+  tasks: {
+    approvalKey: 'system_design',
+    prevApprovalKey: 'prd',
+    prevArtifactKey: 'prd',
+    prevName: 'Etapa 2 (PRD)',
+  },
+  change_plan: {
+    approvalKey: 'code_modification',
+    prevApprovalKey: 'system_design',
+    prevArtifactKey: 'system_design',
+    prevName: 'Etapa 3 (Arquitectura)',
+  },
+  patch: {
+    approvalKey: 'code_modification',
+    prevApprovalKey: 'system_design',
+    prevArtifactKey: 'system_design',
+    prevName: 'Etapa 3 (Arquitectura)',
+  },
+  qa_report: {
+    approvalKey: 'qa_report',
+    prevApprovalKey: 'code_modification',
+    prevArtifactKey: 'patch',
+    prevName: 'Etapa 4 (Código)',
+  },
+};
+
 function updateStepperBadges(artifacts, approvals = state.humanApprovals) {
   const steps = [
-    { id: 'badge-discovery', exists: artifacts.discovery_notes, approvalKey: 'discovery_notes' },
-    { id: 'badge-prd', exists: artifacts.prd, approvalKey: 'prd' },
-    { id: 'badge-system_design', exists: artifacts.system_design, approvalKey: 'system_design' },
-    { id: 'badge-patch', exists: artifacts.patch, approvalKey: 'code_modification' },
-    { id: 'badge-qa_report', exists: artifacts.qa_report, approvalKey: 'qa_report' },
+    { cardId: 'step-discovery', id: 'badge-discovery', exists: artifacts.discovery_notes, approvalKey: 'discovery_notes', prevKey: null },
+    { cardId: 'step-prd', id: 'badge-prd', exists: artifacts.prd, approvalKey: 'prd', prevKey: 'discovery_notes' },
+    { cardId: 'step-system_design', id: 'badge-system_design', exists: artifacts.system_design, approvalKey: 'system_design', prevKey: 'prd' },
+    { cardId: 'step-patch', id: 'badge-patch', exists: artifacts.patch, approvalKey: 'code_modification', prevKey: 'system_design' },
+    { cardId: 'step-qa_report', id: 'badge-qa_report', exists: artifacts.qa_report, approvalKey: 'qa_report', prevKey: 'code_modification' },
   ];
 
   steps.forEach(s => {
     const el = document.getElementById(s.id);
+    const card = document.getElementById(s.cardId);
+    const isApproved = Boolean(approvals && approvals[s.approvalKey]);
+    const isPrevApproved = !s.prevKey || Boolean(approvals && approvals[s.prevKey]);
+
+    if (card) {
+      card.classList.toggle('locked', !isPrevApproved && !s.exists);
+    }
+
     if (el) {
       if (!s.exists) {
-        el.textContent = 'Pendiente';
+        // Estado 1: Pendiente - No existe
+        el.textContent = isPrevApproved ? 'Pendiente' : '🔒 Bloqueado';
         el.className = 'step-status-badge badge-pending';
-      } else if (approvals && approvals[s.approvalKey]) {
+      } else if (isApproved) {
+        // Estado 3: Aprobado
         el.textContent = '✅ Aprobado';
         el.className = 'step-status-badge badge-approved';
       } else {
+        // Estado 2: Por Aprobar - Existe pero no aprobado por el humano
         el.textContent = '⏳ Por Aprobar';
         el.className = 'step-status-badge badge-review';
       }
+    }
+  });
+
+  updateArtifactTreeBadges();
+}
+
+function updateArtifactTreeBadges() {
+  const treeItems = document.querySelectorAll('#artifact-tree .artifact-item');
+  treeItems.forEach(item => {
+    const key = item.dataset.artifact;
+    const dep = STAGE_DEPENDENCIES[key];
+    if (!dep || !dep.approvalKey) return;
+
+    const exists = Boolean(state.artifactsStatus[key]);
+    const isApproved = Boolean(state.humanApprovals[dep.approvalKey]);
+    let badgeSpan = item.querySelector('.artifact-tree-badge');
+    if (!badgeSpan) {
+      badgeSpan = document.createElement('span');
+      badgeSpan.className = 'artifact-tree-badge';
+      item.appendChild(badgeSpan);
+    }
+
+    if (!exists) {
+      badgeSpan.textContent = 'Pendiente';
+      badgeSpan.className = 'artifact-tree-badge badge-pending-mini';
+    } else if (isApproved) {
+      badgeSpan.textContent = 'Aprobado';
+      badgeSpan.className = 'artifact-tree-badge badge-approved-mini';
+    } else {
+      badgeSpan.textContent = 'Por Aprobar';
+      badgeSpan.className = 'artifact-tree-badge badge-review-mini';
     }
   });
 }
@@ -456,51 +550,113 @@ function updateStageActionBar(artifactKey) {
 
   if (state.mode === 'git') {
     dom.btnStageAction.textContent = '📥 Restaurar Esta Versión en Workspace';
+    dom.btnStageAction.disabled = false;
+    dom.btnStageAction.title = 'Restaura los archivos de esta versión en el workspace del proyecto.';
     dom.btnStageAction.onclick = () => restoreCurrentBranch();
     if (dom.stageApprovalBadge) dom.stageApprovalBadge.classList.add('hidden');
     if (dom.btnApproveStage) dom.btnApproveStage.classList.add('hidden');
+    return;
+  }
+
+  const dep = STAGE_DEPENDENCIES[artifactKey] || { approvalKey: null, prevApprovalKey: null, prevArtifactKey: null, prevName: null };
+  const exists = Boolean(state.artifactsStatus[artifactKey]);
+  const isApproved = Boolean(dep.approvalKey && state.humanApprovals[dep.approvalKey]);
+  const prevApproved = !dep.prevApprovalKey || Boolean(state.humanApprovals[dep.prevApprovalKey]);
+  const prevArtifactExists = !dep.prevArtifactKey || Boolean(state.artifactsStatus[dep.prevArtifactKey]);
+
+  // Tres estados posibles de la etapa:
+  // 1. Pendiente - No existe
+  // 2. Por Aprobar - Existe pero no aprobado por el humano
+  // 3. Aprobado - Existe y aprobado por el humano
+  let stageState = 1;
+  if (exists && isApproved) {
+    stageState = 3;
+  } else if (exists && !isApproved) {
+    stageState = 2;
   } else {
-    const exists = state.artifactsStatus[artifactKey];
-    dom.btnStageAction.textContent = exists ? `🔄 Re-${cfg.btnText}` : `🚀 ${cfg.btnText}`;
-    dom.btnStageAction.onclick = cfg.action;
+    stageState = 1;
+  }
 
-    // Control de Compuerta de Aprobación Humana
-    const appKey = getStageApprovalKey(artifactKey);
-    if (appKey && dom.stageApprovalBadge && dom.btnApproveStage) {
-      if (!exists) {
-        dom.stageApprovalBadge.classList.add('hidden');
-        dom.btnApproveStage.classList.add('hidden');
+  // 1. Badge de Estado de la Etapa
+  if (dom.stageApprovalBadge) {
+    dom.stageApprovalBadge.classList.remove('hidden');
+    if (stageState === 1) {
+      dom.stageApprovalBadge.textContent = '⚪ Estado 1: Pendiente (No existe)';
+      dom.stageApprovalBadge.className = 'approval-badge badge-pending';
+    } else if (stageState === 2) {
+      dom.stageApprovalBadge.textContent = '⏳ Estado 2: Por Aprobar (Requiere Aprobación Humana)';
+      dom.stageApprovalBadge.className = 'approval-badge badge-pending-approval';
+    } else {
+      dom.stageApprovalBadge.textContent = '✅ Estado 3: Aprobado por Humano';
+      dom.stageApprovalBadge.className = 'approval-badge badge-approved-human';
+    }
+  }
+
+  // 2. Botón de Aprobación / Revocación
+  if (dom.btnApproveStage && dep.approvalKey) {
+    if (stageState === 1) {
+      // Estado 1: No existe aún el documento, no hay nada que aprobar
+      dom.btnApproveStage.classList.add('hidden');
+    } else if (stageState === 2) {
+      // Estado 2: Existe pero no aprobado -> Botón para Aprobar
+      dom.btnApproveStage.classList.remove('hidden');
+      if (dep.approvalKey === 'code_modification') {
+        dom.btnApproveStage.textContent = '🛡️ Revisar Impacto y Aprobar Código';
+        dom.btnApproveStage.className = 'btn btn-success-action';
+        dom.btnApproveStage.onclick = () => openCodeApprovalModal();
       } else {
-        dom.stageApprovalBadge.classList.remove('hidden');
-        dom.btnApproveStage.classList.remove('hidden');
-        const isApproved = Boolean(state.humanApprovals[appKey]);
+        dom.btnApproveStage.textContent = '✅ Aprobar Esta Etapa';
+        dom.btnApproveStage.className = 'btn btn-success-action';
+        dom.btnApproveStage.onclick = () => toggleStageApproval(dep.approvalKey, true);
+      }
 
-        if (isApproved) {
-          dom.stageApprovalBadge.textContent = '✅ Aprobado por Humano';
-          dom.stageApprovalBadge.className = 'approval-badge badge-approved-human';
-          dom.btnApproveStage.textContent = '❌ Revocar Aprobación';
-          dom.btnApproveStage.className = 'btn btn-secondary';
-          dom.btnApproveStage.onclick = () => toggleStageApproval(appKey, false);
-        } else {
-          dom.stageApprovalBadge.textContent = '⏳ Por Aprobar';
-          dom.stageApprovalBadge.className = 'approval-badge badge-pending-approval';
-          dom.btnApproveStage.textContent = (appKey === 'code_modification')
-            ? '🛡️ Revisar Impacto y Aprobar Código'
-            : '✅ Aprobar Esta Etapa';
-          dom.btnApproveStage.className = 'btn btn-success-action';
-          dom.btnApproveStage.onclick = () => {
-            if (appKey === 'code_modification') {
-              openCodeApprovalModal();
-            } else {
-              toggleStageApproval(appKey, true);
-            }
-          };
-        }
+      // No se puede aprobar si el paso anterior no está en estado 3 (Aprobado)
+      if (!prevApproved) {
+        dom.btnApproveStage.disabled = true;
+        dom.btnApproveStage.title = `Bloqueado: Requiere que la ${dep.prevName} esté Aprobada primero.`;
+      } else {
+        dom.btnApproveStage.disabled = false;
+        dom.btnApproveStage.title = 'Aprobar formalmente esta etapa y habilitar la fase siguiente.';
       }
     } else {
-      if (dom.stageApprovalBadge) dom.stageApprovalBadge.classList.add('hidden');
-      if (dom.btnApproveStage) dom.btnApproveStage.classList.add('hidden');
+      // Estado 3: Aprobado -> Botón para Revocar Aprobación
+      dom.btnApproveStage.classList.remove('hidden');
+      dom.btnApproveStage.textContent = '❌ Revocar Aprobación';
+      dom.btnApproveStage.className = 'btn btn-secondary';
+      dom.btnApproveStage.disabled = false;
+      dom.btnApproveStage.title = 'Revoca la aprobación para habilitar la re-ejecución de esta etapa.';
+      dom.btnApproveStage.onclick = () => toggleStageApproval(dep.approvalKey, false);
     }
+  } else if (dom.btnApproveStage) {
+    dom.btnApproveStage.classList.add('hidden');
+  }
+
+  // 3. Botón de Generación / Regeneración de la Etapa
+  // Regla A: NO puedo generar el documento si está APROBADO (Estado 3). Debe revocarse primero.
+  // Regla B: NO puedo generar el documento si NO existe el documento anterior o no está Aprobado.
+  if (stageState === 3) {
+    // Regla A: Ya está APROBADO
+    dom.btnStageAction.disabled = true;
+    dom.btnStageAction.textContent = '🔒 Bloqueado: Etapa Aprobada (Revoca para regenerar)';
+    dom.btnStageAction.title = 'Esta etapa ya está APROBADA. Para regenerarla, haz clic primero en "Revocar Aprobación".';
+    dom.btnStageAction.onclick = null;
+  } else if (!prevArtifactExists || !prevApproved) {
+    // Regla B: Predecesor no existe o no está en Estado 3 (Aprobado)
+    dom.btnStageAction.disabled = true;
+    const reason = !prevArtifactExists 
+      ? `Falta documento de ${dep.prevName}` 
+      : `${dep.prevName} no está Aprobada`;
+    dom.btnStageAction.textContent = `🚫 Bloqueado (${reason})`;
+    dom.btnStageAction.title = `Hasta que la ${dep.prevName} no esté en estado 3 (Aprobado), no se puede hacer nada con las etapas posteriores.`;
+    dom.btnStageAction.onclick = null;
+  } else {
+    // Permitido generar o re-generar (Estado 1 o Estado 2 con predecesor aprobado)
+    dom.btnStageAction.disabled = false;
+    dom.btnStageAction.textContent = (stageState === 2) ? `🔄 Re-${cfg.btnText}` : `🚀 ${cfg.btnText}`;
+    dom.btnStageAction.title = (stageState === 2)
+      ? 'Re-ejecutar la generación de esta etapa.'
+      : 'Generar el documento inicial de esta etapa.';
+    dom.btnStageAction.onclick = cfg.action;
   }
 }
 

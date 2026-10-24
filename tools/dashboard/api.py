@@ -349,6 +349,101 @@ def export_application_endpoint(req: ExportRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def get_project_approvals(context_file: Path) -> dict[str, bool]:
+    """Lee el diccionario de aprobaciones humanas del archivo workflow_context.json."""
+    if not context_file.exists():
+        return {}
+    try:
+        with open(context_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("WORKFLOW_CONTEXT", {}).get("human_approvals", {})
+    except Exception:
+        return {}
+
+
+def validate_stage_execution(stage_key: str, project_paths: dict[str, Any], is_new_project: bool = False):
+    """
+    Valida las reglas estrictas de gobernanza para la generación de etapas:
+    Regla A: NO se puede generar el documento correspondiente si está APROBADO (debe revocarse primero).
+    Regla B: NO se puede generar si no existe el documento del paso anterior o no está APROBADO.
+    """
+    if is_new_project and stage_key == "discovery_notes":
+        return
+
+    approvals = get_project_approvals(project_paths["context"])
+
+    # 1. Regla A: Si la etapa actual ya está aprobada, se bloquea la regeneración hasta que se revoque.
+    if approvals.get(stage_key, False):
+        stage_names = {
+            "discovery_notes": "Etapa 1 (Discovery & Grilling)",
+            "prd": "Etapa 2 (Product Manager - PRD)",
+            "system_design": "Etapa 3 (Arquitecto - System Design)",
+            "code_modification": "Etapa 4 (Programador - Código)",
+            "qa_report": "Etapa 5 (QA Hostile Auditor)",
+        }
+        name = stage_names.get(stage_key, stage_key)
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede regenerar '{name}': La etapa ya se encuentra APROBADA formalmente. "
+                   f"Para regenerar este documento, primero debes revocar la aprobación existente."
+        )
+
+    # 2. Regla B: Predecesores obligatorios (deben existir y estar en estado 3: Aprobado).
+    predecessors = {
+        "discovery_notes": None,
+        "prd": {
+            "key": "discovery_notes",
+            "file": project_paths["01_prd"] / "DISCOVERY_NOTES.md",
+            "name": "Etapa 1 (Discovery & Grilling)",
+            "doc": "DISCOVERY_NOTES.md",
+        },
+        "system_design": {
+            "key": "prd",
+            "file": project_paths["01_prd"] / "PRD.md",
+            "name": "Etapa 2 (Product Manager)",
+            "doc": "PRD.md",
+        },
+        "code_modification": {
+            "key": "system_design",
+            "file": project_paths["02_system_design"] / "SYSTEM_DESIGN.md",
+            "name": "Etapa 3 (Arquitecto)",
+            "doc": "SYSTEM_DESIGN.md",
+        },
+        "qa_report": {
+            "key": "code_modification",
+            "file": project_paths["03_code_patches"] / "model.patch",
+            "name": "Etapa 4 (Programador - Código)",
+            "doc": "código / model.patch",
+        },
+    }
+
+    pred = predecessors.get(stage_key)
+    if pred:
+        # Verificar existencia del documento anterior
+        if pred["file"] and not pred["file"].exists():
+            if stage_key == "qa_report":
+                ws = project_paths["workspace"]
+                has_files = ws.exists() and any(ws.iterdir())
+                if not has_files and not pred["file"].exists():
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"No se puede proceder con la etapa: No existe el documento de la etapa anterior ({pred['doc']})."
+                    )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No se puede proceder con la etapa: No existe el documento de la etapa anterior ({pred['doc']})."
+                )
+
+        # Verificar aprobación del paso anterior (Estado 3: Aprobado)
+        if not approvals.get(pred["key"], False):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Bloqueado: La {pred['name']} aún no ha sido APROBADA formalmente por el usuario humano. "
+                       f"Hasta que no esté en estado 'Aprobado', no se puede ejecutar ninguna etapa posterior."
+            )
+
+
 @app.post("/api/actions/interview")
 def run_interview_endpoint(req: InterviewRequest):
     """Ejecuta la elicitación de requerimientos Grill-Me dentro de la carpeta del proyecto."""
@@ -358,6 +453,8 @@ def run_interview_endpoint(req: InterviewRequest):
 
         if not paths["root"].exists() or req.reset_first:
             paths = create_new_project(proj_name, requirement=req.prompt)
+        else:
+            validate_stage_execution("discovery_notes", paths, is_new_project=False)
 
         output_file = paths["01_prd"] / "DISCOVERY_NOTES.md"
         output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -404,6 +501,8 @@ def run_interview_endpoint(req: InterviewRequest):
                 "answers": answers,
                 "file": str(disc_file),
             }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -413,6 +512,9 @@ def generate_prd_endpoint(project: Optional[str] = None):
     """Etapa 2: Genera el Documento de Requerimientos de Producto (PRD.md) para el proyecto activo."""
     try:
         pname = project or get_active_project_name()
+        paths = get_project_paths(pname)
+        validate_stage_execution("prd", paths)
+
         prd_file = generate_prd_artifact(project_name=pname)
         commit_project_stage(pname, "prd", f"feat(prd): generate PRD and acceptance criteria for '{pname}'")
         return {
@@ -421,6 +523,8 @@ def generate_prd_endpoint(project: Optional[str] = None):
             "message": f"PRD.md generado con éxito por el Product Manager para '{pname}'.",
             "file": str(prd_file),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -430,6 +534,9 @@ def generate_system_design_endpoint(project: Optional[str] = None):
     """Etapa 3: Genera la Arquitectura del Sistema (SYSTEM_DESIGN.md y TASKS.md) para el proyecto activo."""
     try:
         pname = project or get_active_project_name()
+        paths = get_project_paths(pname)
+        validate_stage_execution("system_design", paths)
+
         design_file, tasks_file = generate_system_design_artifact(project_name=pname)
         commit_project_stage(pname, "system_design", f"feat(design): system design and tasks roadmap for '{pname}'")
         return {
@@ -439,6 +546,8 @@ def generate_system_design_endpoint(project: Optional[str] = None):
             "design_file": str(design_file),
             "tasks_file": str(tasks_file),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -448,6 +557,9 @@ def run_qa_endpoint(project: Optional[str] = None):
     """Etapa 5: Ejecuta la auditoría hostil de límites y la suite de tests sobre el proyecto activo."""
     try:
         pname = project or get_active_project_name()
+        paths = get_project_paths(pname)
+        validate_stage_execution("qa_report", paths)
+
         approved, qa_file = run_qa_audit_and_tests(project_name=pname)
         tag = "v1.0.0" if approved else None
         commit_project_stage(
@@ -463,6 +575,8 @@ def run_qa_endpoint(project: Optional[str] = None):
             "message": f"Auditoría de QA completada para '{pname}'. Dictamen: {status_label}",
             "file": str(qa_file),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -538,6 +652,23 @@ def approve_stage_endpoint(stage_key: str, project: Optional[str] = None):
         raise HTTPException(status_code=400, detail=f"Clave de etapa no válida para aprobación: '{stage_key}'")
 
     paths = get_project_paths(project)
+    approvals = get_project_approvals(paths["context"])
+
+    # Regla: hasta que la etapa anterior no esté en estado 3 (Aprobado), no se puede aprobar una etapa posterior
+    predecessors = {
+        "prd": ("discovery_notes", "Etapa 1 (Discovery & Grilling)"),
+        "system_design": ("prd", "Etapa 2 (Product Manager - PRD)"),
+        "change_plan": ("system_design", "Etapa 3 (Arquitecto - System Design)"),
+        "code_modification": ("system_design", "Etapa 3 (Arquitecto - System Design)"),
+        "qa_report": ("code_modification", "Etapa 4 (Programador - Código)"),
+    }
+    pred = predecessors.get(stage_key)
+    if pred and not approvals.get(pred[0], False):
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se puede aprobar esta etapa: La {pred[1]} debe estar Aprobada primero (Estado 3)."
+        )
+
     context_file = paths["context"]
     ctx = {}
     if context_file.exists():
@@ -546,6 +677,10 @@ def approve_stage_endpoint(stage_key: str, project: Optional[str] = None):
     ctx.setdefault("WORKFLOW_CONTEXT", {})
     ctx["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})
     ctx["WORKFLOW_CONTEXT"]["human_approvals"][stage_key] = True
+    if stage_key == "code_modification":
+        ctx["WORKFLOW_CONTEXT"]["human_approvals"]["change_plan"] = True
+    elif stage_key == "change_plan":
+        ctx["WORKFLOW_CONTEXT"]["human_approvals"]["code_modification"] = True
 
     with open(context_file, "w", encoding="utf-8") as f:
         json.dump(ctx, f, indent=4)
@@ -570,7 +705,7 @@ def approve_stage_endpoint(stage_key: str, project: Optional[str] = None):
 
 @app.post("/api/actions/revoke/{stage_key}")
 def revoke_approval_endpoint(stage_key: str, project: Optional[str] = None):
-    """Revoca la aprobación de una etapa solicitando ajustes al agente para el proyecto activo."""
+    """Revoca la aprobación de una etapa y en cascada las etapas posteriores."""
     paths = get_project_paths(project)
     context_file = paths["context"]
     ctx = {}
@@ -579,15 +714,35 @@ def revoke_approval_endpoint(stage_key: str, project: Optional[str] = None):
             ctx = json.load(f)
     ctx.setdefault("WORKFLOW_CONTEXT", {})
     ctx["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})
-    ctx["WORKFLOW_CONTEXT"]["human_approvals"][stage_key] = False
+
+    stages_order = ["discovery_notes", "prd", "system_design", "code_modification", "qa_report"]
+    norm_key = "code_modification" if stage_key == "change_plan" else stage_key
+
+    if norm_key in stages_order:
+        start_idx = stages_order.index(norm_key)
+        for s in stages_order[start_idx:]:
+            ctx["WORKFLOW_CONTEXT"]["human_approvals"][s] = False
+        if norm_key == "code_modification" or start_idx <= stages_order.index("code_modification"):
+            ctx["WORKFLOW_CONTEXT"]["human_approvals"]["change_plan"] = False
+    else:
+        ctx["WORKFLOW_CONTEXT"]["human_approvals"][stage_key] = False
 
     with open(context_file, "w", encoding="utf-8") as f:
         json.dump(ctx, f, indent=4)
 
+    label_map = {
+        "discovery_notes": "Etapa 1: Discovery & Grilling",
+        "prd": "Etapa 2: Product Manager (PRD)",
+        "system_design": "Etapa 3: Arquitecto (System Design)",
+        "change_plan": "Etapa 4: Plan de Cambios",
+        "code_modification": "Compuerta de Modificación de Fuentes",
+        "qa_report": "Etapa 5: QA Hostile Auditor",
+    }
+    label = label_map.get(stage_key, stage_key)
     return {
         "success": True,
         "project_name": paths["project_name"],
-        "message": f"Aprobación revocada para '{stage_key}'. Se solicitarán ajustes.",
+        "message": f"Aprobación revocada para '{label}'. La etapa vuelve a 'Por Aprobar' permitiendo su re-ejecución.",
         "stage_key": stage_key,
         "human_approvals": ctx["WORKFLOW_CONTEXT"]["human_approvals"],
     }
