@@ -1,7 +1,7 @@
 {
     "WORKFLOW_CONTEXT": {
         "project_metadata": {
-            "project_name": "nueva_aplicacion",
+            "project_name": "weather_tool",
             "status": "QA_APPROVED",
             "tech_stack_selection_mode": "AGENT_DECIDED"
         },
@@ -10,32 +10,46 @@
             "hotfixes_from": "main"
         },
         "project_architecture": {
-            "pattern": "Layered Service-Repository Pattern",
+            "_populated_by": "Architect Agent",
+            "pattern": "Layered / Modular Service-Repository Pattern",
             "primary_language": "Python 3.11+",
-            "framework": "Standard Library / Modular Service",
-            "database_or_storage": "SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)",
+            "framework": "Standard Library (argparse, sqlite3, urllib)",
+            "database_or_storage": "SQLite3 (Local persistent cache with TTL)",
             "testing_framework": "unittest"
         },
         "mandatory_ci_checks": {
+            "_populated_by": "Architect Agent",
             "unit_test_command": "python3 -m unittest discover -s environment/workspace/tests -t environment/workspace -p 'test_*.py' -v",
-            "linter_command": "python3 -m py_compile environment/workspace/main.py environment/workspace/app/*.py environment/workspace/tests/*.py",
-            "static_analysis_command": "python3 -m py_compile environment/workspace/main.py",
+            "linter_command": "python3 -m py_compile environment/workspace/main.py environment/workspace/weather_tool/*.py environment/workspace/tests/*.py",
+            "static_analysis_command": "python3 -m py_compile environment/workspace/main.py environment/workspace/weather_tool/*.py environment/workspace/tests/*.py",
             "formatter_command": null
         },
         "docker_environment": {
             "_populated_by": "Architect Agent",
             "dockerfile_path": "environment/Dockerfile",
-            "start_command": null,
+            "start_command": "python3 environment/workspace/main.py --help",
             "exec_prefix": null,
             "sandbox_isolation": true
         },
         "deployment_method": {
             "_populated_by": "Architect Agent",
-            "strategy": null
+            "strategy": "CLI standalone execution / Python package"
         },
         "file_boundaries_template": {
             "allowed_to_touch": [
-                "environment/workspace/*"
+                "environment/workspace/weather_tool/__init__.py",
+                "environment/workspace/weather_tool/models.py",
+                "environment/workspace/weather_tool/cache.py",
+                "environment/workspace/weather_tool/client.py",
+                "environment/workspace/weather_tool/service.py",
+                "environment/workspace/weather_tool/cli.py",
+                "environment/workspace/main.py",
+                "environment/workspace/tests/__init__.py",
+                "environment/workspace/tests/test_models.py",
+                "environment/workspace/tests/test_cache.py",
+                "environment/workspace/tests/test_client.py",
+                "environment/workspace/tests/test_service.py",
+                "environment/workspace/tests/test_cli.py"
             ],
             "strictly_forbidden": [
                 "config/*",

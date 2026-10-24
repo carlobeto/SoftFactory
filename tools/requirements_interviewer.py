@@ -13,10 +13,14 @@ import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-SHARED_POOL = ROOT_DIR / "shared_pool"
-PRD_POOL = SHARED_POOL / "01_prd"
-CONFIG_DIR = ROOT_DIR / "config"
-CONTEXT_FILE = CONFIG_DIR / "workflow_context.json"
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+try:
+    from tools.factory_manager import get_project_paths, get_active_project_name
+except ImportError:
+    get_project_paths = None
+    get_active_project_name = lambda: "app"
 
 
 def ask_round_question(q_id, title, description, options, recommended, interactive=True):
@@ -55,11 +59,14 @@ def ask_round_question(q_id, title, description, options, recommended, interacti
     return selected_code, selected_text
 
 
-def run_grill_interview(initial_prompt: str, interactive: bool = True):
+def run_grill_interview(initial_prompt: str, interactive: bool = True, project_name: str = None):
     """
     Ejecuta las rondas del árbol de diseño basadas en la filosofía 'grill-me'.
+    Guarda los artefactos de forma aislada en projects/<project_name>/artifacts/01_prd/.
     """
-    PRD_POOL.mkdir(parents=True, exist_ok=True)
+    paths = get_project_paths(project_name) if get_project_paths else {"01_prd": Path("projects/app/artifacts/01_prd")}
+    prd_pool = paths["01_prd"]
+    prd_pool.mkdir(parents=True, exist_ok=True)
 
     print("=" * 70)
     print("  SOFTWARE FACTORY: SESIÓN DE REQUIREMENTS GRILLING & DISCOVERY")
@@ -233,11 +240,11 @@ def run_grill_interview(initial_prompt: str, interactive: bool = True):
     # -------------------------------------------------------------
     # COMPILACIÓN DEL ARTEFACTO: DISCOVERY_NOTES.md
     # -------------------------------------------------------------
-    discovery_file = PRD_POOL / "DISCOVERY_NOTES.md"
+    discovery_file = prd_pool / "DISCOVERY_NOTES.md"
     generate_discovery_notes(initial_prompt, answers, discovery_file)
 
     # Actualizar también NEW_REQUIREMENT.txt
-    req_file = PRD_POOL / "NEW_REQUIREMENT.txt"
+    req_file = prd_pool / "NEW_REQUIREMENT.txt"
     with open(req_file, "w", encoding="utf-8") as f:
         f.write(f"PROYECTO: {initial_prompt}\n")
         f.write("REQUERIMIENTO DESCUBIERTO (GRILL-ME):\n")

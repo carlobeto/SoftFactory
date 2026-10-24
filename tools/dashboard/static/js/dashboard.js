@@ -28,59 +28,67 @@ const state = {
   rawContent: '',
   branches: [],
   artifactsStatus: {},
+  humanApprovals: {},
   activeProject: null,
   wizardStep: 1,
 };
 
 const ARTIFACT_NAMES = {
-  discovery_notes: 'DISCOVERY_NOTES.md (Fase 0)',
-  prd: 'PRD.md (Fase 1: PM)',
-  system_design: 'SYSTEM_DESIGN.md (Fase 2: Arquitecto)',
-  tasks: 'TASKS.md (Fase 2: Tareas)',
-  change_plan: 'CHANGE_PLAN.md (Fase 3: Plan)',
-  patch: 'model.patch (Fase 3: Código)',
-  qa_report: 'QA_REPORT.md (Fase 4: QA)',
+  discovery_notes: 'DISCOVERY_NOTES.md (Etapa 1: Discovery)',
+  delta_requirement: 'DELTA_REQUIREMENT.txt (Mantenimiento)',
+  prd: 'PRD.md (Etapa 2: PM)',
+  system_design: 'SYSTEM_DESIGN.md (Etapa 3: Arquitecto)',
+  tasks: 'TASKS.md (Etapa 3: Tareas)',
+  change_plan: 'CHANGE_PLAN.md (Etapa 4: Plan)',
+  patch: 'model.patch (Etapa 4: Código)',
+  qa_report: 'QA_REPORT.md (Etapa 5: QA)',
 };
 
 const STAGE_CONFIG = {
   discovery_notes: {
-    tag: 'Fase 0: Requirements Discovery',
+    tag: 'Etapa 1: Requirements Discovery & Grilling',
     desc: 'Protocolo de árbol de decisiones para desgranar y congelar requerimientos.',
-    btnText: '✨ Re-ejecutar Elicitación Grill-Me',
-    action: () => openGrillModal(),
+    btnText: '✨ Ejecutar Elicitación Grill-Me',
+    action: () => openGrillWizard('active_project'),
+  },
+  delta_requirement: {
+    tag: 'Lazo de Mantenimiento / Nueva Solicitud',
+    desc: 'Semilla de modificación, issue o requerimiento evolutivo sobre el proyecto activo.',
+    btnText: '🛠️ Formular Modificación o Corrección',
+    action: () => openMaintenanceModal(),
   },
   prd: {
-    tag: 'Fase 1: Product Manager',
+    tag: 'Etapa 2: Product Manager',
     desc: 'Traduce las decisiones de Discovery en objetivos, historias Gherkin y pool priorizado.',
     btnText: '📝 Generar / Regenerar PRD',
     action: () => triggerStageGeneration('/api/actions/generate/prd', 'PRD.md generado con éxito por el Product Manager.'),
   },
   system_design: {
-    tag: 'Fase 2: Arquitecto de Software',
+    tag: 'Etapa 3: Arquitecto de Software',
     desc: 'Diseña la arquitectura técnica, diagramas de clases, secuencias y desglose de tareas.',
     btnText: '📐 Generar / Regenerar Arquitectura & Tareas',
     action: () => triggerStageGeneration('/api/actions/generate/system_design', 'Arquitectura y TASKS.md generados con éxito.'),
   },
   tasks: {
-    tag: 'Fase 2: Tareas de Implementación',
+    tag: 'Etapa 3: Tareas de Implementación',
     desc: 'Lista de módulos y unidades atómicas asignables al Programador.',
     btnText: '📐 Actualizar TASKS.md',
     action: () => triggerStageGeneration('/api/actions/generate/system_design', 'TASKS.md actualizado con éxito.'),
   },
   change_plan: {
-    tag: 'Fase 3: Programador (Plan de Cambios)',
+    tag: 'Etapa 4: Programador (Plan de Cambios)',
     desc: 'Congela la superficie autorizada de archivos antes de escribir código.',
     btnText: '📝 Ver Plan de Cambios',
     action: () => showToast('El plan de cambios se genera automáticamente al implementar el código.', 'info'),
   },
   patch: {
-    tag: 'Fase 3: Programador (Código & Parche)',
+    tag: 'Etapa 4: Programador (Código & Parche)',
     desc: 'Implementación completa del sistema en environment/workspace y generación de model.patch.',
     btnText: '💻 Validar Código en Workspace',
     action: () => showToast('Código inspeccionado. Procede con la auditoría de QA.', 'info'),
   },
   qa_report: {
-    tag: 'Fase 4: QA & Hostile Auditor',
+    tag: 'Etapa 5: QA & Hostile Auditor',
     desc: 'Ejecuta análisis de deriva (Drift Check), linter y la suite de pruebas dinámicas.',
     btnText: '🛡️ Ejecutar Auditoría Hostil y Tests',
     action: () => triggerStageGeneration('/api/actions/run_qa', 'Auditoría de QA y suite de pruebas ejecutadas.'),
@@ -110,10 +118,12 @@ const dom = {
   gitBranchBanner: document.getElementById('git-branch-banner'),
   bannerBranchName: document.getElementById('banner-branch-name'),
   btnRestoreBranch: document.getElementById('btn-restore-branch'),
-  // Barra de acción de etapa
+  // Barra de acción de etapa y compuerta de aprobación
   stageActionToolbar: document.getElementById('stage-action-toolbar'),
   stageActionTag: document.getElementById('stage-action-tag'),
   stageActionDesc: document.getElementById('stage-action-desc'),
+  stageApprovalBadge: document.getElementById('stage-approval-badge'),
+  btnApproveStage: document.getElementById('btn-approve-stage'),
   btnStageAction: document.getElementById('btn-stage-action'),
   // Banner de Siguiente Paso
   nextStepBanner: document.getElementById('next-step-banner'),
@@ -121,22 +131,53 @@ const dom = {
   nextStepDesc: document.getElementById('next-step-desc'),
   btnNextStep: document.getElementById('btn-next-step'),
   // Modales
+  modalProjectLauncher: document.getElementById('modal-project-launcher'),
+  btnOpenLauncher: document.getElementById('btn-open-launcher'),
+  btnCloseLauncher: document.getElementById('btn-close-launcher'),
+  launcherProjectsGrid: document.getElementById('launcher-projects-grid'),
+  launcherGitCount: document.getElementById('launcher-git-count'),
+  launcherGitList: document.getElementById('launcher-git-list'),
+  btnLauncherNewApp: document.getElementById('btn-launcher-new-app'),
+  launcherCurrentName: document.getElementById('launcher-current-name'),
+  launcherCurrentStatus: document.getElementById('launcher-current-status'),
+  btnLauncherContinue: document.getElementById('btn-launcher-continue'),
+  // Modal Nueva App Confirmación
   modalNewAppConfirm: document.getElementById('modal-new-app-confirm'),
   btnOpenNewApp: document.getElementById('btn-open-new-app'),
   btnCloseNewConfirm: document.getElementById('btn-close-new-confirm'),
   btnCancelNewConfirm: document.getElementById('btn-cancel-new-confirm'),
   btnAcceptNewConfirm: document.getElementById('btn-accept-new-confirm'),
+  // Modal Grill Wizard
   modalGrill: document.getElementById('modal-grill'),
   btnCloseGrill: document.getElementById('btn-close-grill'),
   btnWizardPrev: document.getElementById('btn-wizard-prev'),
   btnWizardNext: document.getElementById('btn-wizard-next'),
   btnWizardSubmit: document.getElementById('btn-wizard-submit'),
   grillSummaryContent: document.getElementById('grill-summary-content'),
+  // Modal Mantenimiento / RFC
+  modalMaintenance: document.getElementById('modal-maintenance'),
+  btnOpenMaintenance: document.getElementById('btn-open-maintenance'),
+  btnCloseMaintenance: document.getElementById('btn-close-maintenance'),
+  btnCancelMaintenance: document.getElementById('btn-cancel-maintenance'),
+  btnSubmitMaintenance: document.getElementById('btn-submit-maintenance'),
+  // Modal Compuerta de Aprobación de Código
+  modalCodeApproval: document.getElementById('modal-code-approval'),
+  btnCloseCodeApproval: document.getElementById('btn-close-code-approval'),
+  btnRejectCodeApproval: document.getElementById('btn-reject-code-approval'),
+  btnConfirmCodeApproval: document.getElementById('btn-confirm-code-approval'),
+  codeApprovalAllowedList: document.getElementById('code-approval-allowed-list'),
+  codeApprovalForbiddenList: document.getElementById('code-approval-forbidden-list'),
+  codeApprovalMaintContext: document.getElementById('code-approval-maint-context'),
+  codeApprovalDeltaText: document.getElementById('code-approval-delta-text'),
+  codeApprovalPlanText: document.getElementById('code-approval-plan-text'),
+  // Modal Reset
   modalReset: document.getElementById('modal-reset'),
+  resetModalPname: document.getElementById('reset-modal-pname'),
   btnOpenReset: document.getElementById('btn-open-reset'),
   btnCloseReset: document.getElementById('btn-close-reset'),
   btnCancelReset: document.getElementById('btn-cancel-reset'),
   btnConfirmReset: document.getElementById('btn-confirm-reset'),
+  btnDeleteActiveProject: document.getElementById('btn-delete-active-project'),
   btnExportApp: document.getElementById('btn-export-app'),
   toastContainer: document.getElementById('toast-container'),
 };
@@ -157,34 +198,63 @@ async function loadStatus() {
     const data = await res.json();
     state.activeProject = data.project_metadata;
     state.artifactsStatus = data.artifacts_status || {};
+    state.humanApprovals = data.human_approvals || {};
 
-    dom.activeProjectName.textContent = data.project_metadata.project_name || 'Sin Proyecto';
+    const projName = data.project_metadata.project_name || 'Sin Proyecto';
     const status = data.project_metadata.status || 'INITIALIZED';
+
+    dom.activeProjectName.textContent = projName;
     dom.activeProjectStatus.textContent = status;
     dom.activeProjectStatus.className = `pill-status badge-${status.toLowerCase()}`;
+    document.title = `SoftFactory [${projName}] - Control Plane`;
 
-    updateStepperBadges(state.artifactsStatus);
+    if (dom.launcherCurrentName) dom.launcherCurrentName.textContent = projName;
+    if (dom.launcherCurrentStatus) {
+      dom.launcherCurrentStatus.textContent = status;
+      dom.launcherCurrentStatus.className = `badge-${status.toLowerCase()}`;
+    }
+    if (dom.resetModalPname) dom.resetModalPname.textContent = `${projName} (projects/${projName})`;
+
+    if (data.projects) {
+      renderProjectsGrid(data.projects, projName);
+    }
+
+    const deltaItem = document.getElementById('item-delta-req');
+    if (deltaItem) {
+      deltaItem.classList.toggle('hidden', !state.artifactsStatus.delta_requirement);
+    }
+
+    updateStepperBadges(state.artifactsStatus, state.humanApprovals);
     renderWorkspaceFiles(data.workspace_files);
     updateNextStepSuggestion();
+    await loadGitOverview();
   } catch (err) {
     console.error('Error cargando estado:', err);
   }
 }
 
-function updateStepperBadges(artifacts) {
+function updateStepperBadges(artifacts, approvals = state.humanApprovals) {
   const steps = [
-    { id: 'badge-discovery', exists: artifacts.discovery_notes },
-    { id: 'badge-prd', exists: artifacts.prd },
-    { id: 'badge-system_design', exists: artifacts.system_design },
-    { id: 'badge-patch', exists: artifacts.patch },
-    { id: 'badge-qa_report', exists: artifacts.qa_report },
+    { id: 'badge-discovery', exists: artifacts.discovery_notes, approvalKey: 'discovery_notes' },
+    { id: 'badge-prd', exists: artifacts.prd, approvalKey: 'prd' },
+    { id: 'badge-system_design', exists: artifacts.system_design, approvalKey: 'system_design' },
+    { id: 'badge-patch', exists: artifacts.patch, approvalKey: 'code_modification' },
+    { id: 'badge-qa_report', exists: artifacts.qa_report, approvalKey: 'qa_report' },
   ];
 
   steps.forEach(s => {
     const el = document.getElementById(s.id);
     if (el) {
-      el.textContent = s.exists ? 'Completado' : 'Pendiente';
-      el.className = `step-status-badge ${s.exists ? 'badge-approved' : 'badge-pending'}`;
+      if (!s.exists) {
+        el.textContent = 'Pendiente';
+        el.className = 'step-status-badge badge-pending';
+      } else if (approvals && approvals[s.approvalKey]) {
+        el.textContent = '✅ Aprobado';
+        el.className = 'step-status-badge badge-approved';
+      } else {
+        el.textContent = '⏳ Por Aprobar';
+        el.className = 'step-status-badge badge-review';
+      }
     }
   });
 }
@@ -202,7 +272,84 @@ function renderWorkspaceFiles(files) {
   });
 }
 
-// --- Sugerencia del Siguiente Paso (Next Step Progression) ---
+// --- Compuerta de Aprobación Humana (Helpers) ---
+function getStageApprovalKey(artifactKey) {
+  if (artifactKey === 'discovery_notes') return 'discovery_notes';
+  if (artifactKey === 'prd') return 'prd';
+  if (artifactKey === 'system_design' || artifactKey === 'tasks') return 'system_design';
+  if (artifactKey === 'patch' || artifactKey === 'change_plan') return 'code_modification';
+  if (artifactKey === 'qa_report') return 'qa_report';
+  return null;
+}
+
+async function toggleStageApproval(stageKey, approve) {
+  try {
+    const endpoint = approve ? `/api/actions/approve/${stageKey}` : `/api/actions/revoke/${stageKey}`;
+    const res = await fetch(endpoint, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al cambiar aprobación');
+    showToast(data.message, 'success');
+    await loadStatus();
+    updateStageActionBar(state.selectedArtifact);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function openCodeApprovalModal() {
+  if (!dom.modalCodeApproval) return;
+  try {
+    const res = await fetch('/api/actions/preflight_code_check');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error obteniendo chequeo de código');
+
+    if (dom.codeApprovalAllowedList) {
+      dom.codeApprovalAllowedList.innerHTML = '';
+      if (data.allowed_to_touch && data.allowed_to_touch.length > 0) {
+        data.allowed_to_touch.forEach(file => {
+          const li = document.createElement('li');
+          li.textContent = `📄 ${file}`;
+          dom.codeApprovalAllowedList.appendChild(li);
+        });
+      } else {
+        dom.codeApprovalAllowedList.innerHTML = '<li class="empty-state-small">Sin restricciones específicas declaradas (aplica workspace completo).</li>';
+      }
+    }
+
+    if (dom.codeApprovalForbiddenList) {
+      dom.codeApprovalForbiddenList.innerHTML = '';
+      (data.forbidden_directories || []).forEach(dir => {
+        const li = document.createElement('li');
+        li.textContent = `🔒 ${dir}`;
+        dom.codeApprovalForbiddenList.appendChild(li);
+      });
+    }
+
+    if (dom.codeApprovalMaintContext) {
+      dom.codeApprovalMaintContext.classList.toggle('hidden', !data.delta_requirement);
+    }
+
+    if (dom.codeApprovalDeltaText) {
+      dom.codeApprovalDeltaText.textContent = data.delta_requirement || 'No hay delta de mantenimiento activo. Generación inicial del proyecto.';
+    }
+
+    if (dom.codeApprovalPlanText) {
+      dom.codeApprovalPlanText.textContent = data.change_plan || 'El plan de cambios se basará en las tareas asignadas en TASKS.md.';
+    }
+
+    dom.modalCodeApproval.classList.remove('hidden');
+  } catch (err) {
+    showToast('Error cargando preflight de código: ' + err.message, 'error');
+  }
+}
+
+function closeCodeApprovalModal() {
+  if (dom.modalCodeApproval) {
+    dom.modalCodeApproval.classList.add('hidden');
+  }
+}
+
+// --- Sugerencia del Siguiente Paso (Next Step Progression 1 a 5 con Compuertas Humanas) ---
 function updateNextStepSuggestion() {
   if (state.mode !== 'workspace') {
     dom.nextStepBanner.classList.add('hidden');
@@ -210,24 +357,48 @@ function updateNextStepSuggestion() {
   }
 
   const s = state.artifactsStatus;
+  const approvals = state.humanApprovals || {};
 
+  // Caso A: Lazo de mantenimiento o corrección activo y modificación de fuentes NO aprobada aún
+  if (s.delta_requirement && !approvals.code_modification) {
+    dom.nextStepTitle.textContent = '🛡️ Compuerta Crítica: Aprobación de Modificación de Fuentes';
+    dom.nextStepDesc.textContent = 'Se solicitó una corrección o nuevo requerimiento (DELTA). Antes de que el Programador modifique o agregue archivos en environment/workspace/, debes revisar el impacto y autorizarlo.';
+    dom.btnNextStep.textContent = '🛡️ Revisar Impacto y Aprobar Modificación de Fuentes';
+    dom.btnNextStep.onclick = () => openCodeApprovalModal();
+    dom.nextStepBanner.classList.remove('hidden');
+    return;
+  }
+
+  // Caso B: Flujo secuencial 1 a 5 con compuertas de aprobación
   if (!s.discovery_notes) {
-    dom.nextStepTitle.textContent = 'Fase 0 Requerida: Discovery & Grilling';
-    dom.nextStepDesc.textContent = 'Inicia el asistente para definir los requerimientos y congelar las decisiones iniciales.';
-    dom.btnNextStep.textContent = '✨ Iniciar Grill-Me';
-    dom.btnNextStep.onclick = () => openNewAppConfirmation();
+    dom.nextStepTitle.textContent = 'Etapa 1 Requerida: Discovery & Grilling';
+    dom.nextStepDesc.textContent = 'Inicia el asistente para definir los requerimientos, la plataforma y congelar las decisiones iniciales.';
+    dom.btnNextStep.textContent = '✨ Iniciar Grill-Me (Etapa 1)';
+    dom.btnNextStep.onclick = () => openGrillWizard('active_project');
+    dom.nextStepBanner.classList.remove('hidden');
+  } else if (!approvals.discovery_notes) {
+    dom.nextStepTitle.textContent = 'Compuerta Etapa 1: Aprobación de DISCOVERY_NOTES.md';
+    dom.nextStepDesc.textContent = 'El Discovery está generado. Revisa las notas y autoriza el avance hacia el Product Manager.';
+    dom.btnNextStep.textContent = '✅ Aprobar Discovery (Etapa 1)';
+    dom.btnNextStep.onclick = () => toggleStageApproval('discovery_notes', true);
     dom.nextStepBanner.classList.remove('hidden');
   } else if (!s.prd) {
-    dom.nextStepTitle.textContent = 'Siguiente Paso: Fase 1 (Product Manager)';
-    dom.nextStepDesc.textContent = 'El Discovery está congelado. Genera el PRD.md con las historias de usuario y criterios Gherkin.';
+    dom.nextStepTitle.textContent = 'Siguiente Paso: Etapa 2 (Product Manager)';
+    dom.nextStepDesc.textContent = 'El Discovery está aprobado. Genera el PRD.md con las historias de usuario y criterios Gherkin.';
     dom.btnNextStep.textContent = '➡️ Generar PRD (Product Manager)';
     dom.btnNextStep.onclick = async () => {
       await triggerStageGeneration('/api/actions/generate/prd', 'PRD.md generado con éxito por el Product Manager.');
       loadArtifactContent('prd');
     };
     dom.nextStepBanner.classList.remove('hidden');
+  } else if (!approvals.prd) {
+    dom.nextStepTitle.textContent = 'Compuerta Etapa 2: Aprobación de PRD.md';
+    dom.nextStepDesc.textContent = 'El PRD ha sido redactado. Revisa los objetivos y criterios Gherkin antes de diseñar la arquitectura.';
+    dom.btnNextStep.textContent = '✅ Aprobar PRD (Etapa 2)';
+    dom.btnNextStep.onclick = () => toggleStageApproval('prd', true);
+    dom.nextStepBanner.classList.remove('hidden');
   } else if (!s.system_design) {
-    dom.nextStepTitle.textContent = 'Siguiente Paso: Fase 2 (Arquitecto de Software)';
+    dom.nextStepTitle.textContent = 'Siguiente Paso: Etapa 3 (Arquitecto de Software)';
     dom.nextStepDesc.textContent = 'El PRD está aprobado. Genera la especificación técnica (SYSTEM_DESIGN.md) y el desglose de tareas.';
     dom.btnNextStep.textContent = '➡️ Diseñar Arquitectura (Arquitecto)';
     dom.btnNextStep.onclick = async () => {
@@ -235,24 +406,36 @@ function updateNextStepSuggestion() {
       loadArtifactContent('system_design');
     };
     dom.nextStepBanner.classList.remove('hidden');
-  } else if (!s.patch) {
-    dom.nextStepTitle.textContent = 'Siguiente Paso: Fase 3 (Programador)';
-    dom.nextStepDesc.textContent = 'Arquitectura congelada. El código se implementará dentro de environment/workspace/.';
-    dom.btnNextStep.textContent = '➡️ Inspeccionar Workspace / Tareas';
-    dom.btnNextStep.onclick = () => loadArtifactContent('tasks');
+  } else if (!approvals.system_design) {
+    dom.nextStepTitle.textContent = 'Compuerta Etapa 3: Aprobación de Arquitectura';
+    dom.nextStepDesc.textContent = 'La arquitectura técnica está lista. Revisa el diseño y las tareas antes de autorizar código.';
+    dom.btnNextStep.textContent = '✅ Aprobar Arquitectura (Etapa 3)';
+    dom.btnNextStep.onclick = () => toggleStageApproval('system_design', true);
+    dom.nextStepBanner.classList.remove('hidden');
+  } else if (!approvals.code_modification) {
+    dom.nextStepTitle.textContent = '🛡️ Compuerta Crítica: Aprobación de Modificación de Fuentes (Etapa 4)';
+    dom.nextStepDesc.textContent = 'La arquitectura está aprobada. Antes de que el Programador modifique o escriba código en environment/workspace/, debes revisar la superficie permitida y dar tu aprobación explícita.';
+    dom.btnNextStep.textContent = '🛡️ Revisar Impacto y Aprobar Código';
+    dom.btnNextStep.onclick = () => openCodeApprovalModal();
     dom.nextStepBanner.classList.remove('hidden');
   } else if (!s.qa_report) {
-    dom.nextStepTitle.textContent = 'Siguiente Paso: Fase 4 (QA & Hostile Auditor)';
-    dom.nextStepDesc.textContent = 'Código implementado. Ejecuta la auditoría hostil y la suite de pruebas unitarias.';
-    dom.btnNextStep.textContent = '🛡️ Ejecutar Auditoría de QA';
+    dom.nextStepTitle.textContent = 'Siguiente Paso: Etapa 5 (QA & Hostile Auditor)';
+    dom.nextStepDesc.textContent = 'Código modificado bajo aprobación humana. Ejecuta la auditoría hostil y la suite de pruebas unitarias.';
+    dom.btnNextStep.textContent = '🛡️ Ejecutar Auditoría de QA (Etapa 5)';
     dom.btnNextStep.onclick = async () => {
       await triggerStageGeneration('/api/actions/run_qa', 'Auditoría de QA y suite de pruebas ejecutadas.');
       loadArtifactContent('qa_report');
     };
     dom.nextStepBanner.classList.remove('hidden');
+  } else if (!approvals.qa_report) {
+    dom.nextStepTitle.textContent = 'Compuerta Etapa 5: Aprobación de QA_REPORT.md';
+    dom.nextStepDesc.textContent = 'La suite de pruebas y auditoría de drift finalizaron. Revisa los resultados y aprueba la entrega formal.';
+    dom.btnNextStep.textContent = '✅ Aprobar Entrega de QA (Etapa 5)';
+    dom.btnNextStep.onclick = () => toggleStageApproval('qa_report', true);
+    dom.nextStepBanner.classList.remove('hidden');
   } else {
-    dom.nextStepTitle.textContent = '🎉 ¡Ciclo de Software Factory Completado!';
-    dom.nextStepDesc.textContent = 'Todas las etapas han sido aprobadas por QA. Puedes exportar la app o versionarla en Git.';
+    dom.nextStepTitle.textContent = '🎉 ¡Ciclo Aprobado y Completado por Humano!';
+    dom.nextStepDesc.textContent = 'Todas las etapas y la modificación de fuentes han sido aprobadas por ti. Puedes solicitar mantenimiento evolutivo, exportar o crear un nuevo proyecto.';
     dom.btnNextStep.textContent = '📦 Exportar Aplicación Standalone';
     dom.btnNextStep.onclick = () => dom.btnExportApp.click();
     dom.nextStepBanner.classList.remove('hidden');
@@ -274,10 +457,50 @@ function updateStageActionBar(artifactKey) {
   if (state.mode === 'git') {
     dom.btnStageAction.textContent = '📥 Restaurar Esta Versión en Workspace';
     dom.btnStageAction.onclick = () => restoreCurrentBranch();
+    if (dom.stageApprovalBadge) dom.stageApprovalBadge.classList.add('hidden');
+    if (dom.btnApproveStage) dom.btnApproveStage.classList.add('hidden');
   } else {
     const exists = state.artifactsStatus[artifactKey];
     dom.btnStageAction.textContent = exists ? `🔄 Re-${cfg.btnText}` : `🚀 ${cfg.btnText}`;
     dom.btnStageAction.onclick = cfg.action;
+
+    // Control de Compuerta de Aprobación Humana
+    const appKey = getStageApprovalKey(artifactKey);
+    if (appKey && dom.stageApprovalBadge && dom.btnApproveStage) {
+      if (!exists) {
+        dom.stageApprovalBadge.classList.add('hidden');
+        dom.btnApproveStage.classList.add('hidden');
+      } else {
+        dom.stageApprovalBadge.classList.remove('hidden');
+        dom.btnApproveStage.classList.remove('hidden');
+        const isApproved = Boolean(state.humanApprovals[appKey]);
+
+        if (isApproved) {
+          dom.stageApprovalBadge.textContent = '✅ Aprobado por Humano';
+          dom.stageApprovalBadge.className = 'approval-badge badge-approved-human';
+          dom.btnApproveStage.textContent = '❌ Revocar Aprobación';
+          dom.btnApproveStage.className = 'btn btn-secondary';
+          dom.btnApproveStage.onclick = () => toggleStageApproval(appKey, false);
+        } else {
+          dom.stageApprovalBadge.textContent = '⏳ Por Aprobar';
+          dom.stageApprovalBadge.className = 'approval-badge badge-pending-approval';
+          dom.btnApproveStage.textContent = (appKey === 'code_modification')
+            ? '🛡️ Revisar Impacto y Aprobar Código'
+            : '✅ Aprobar Esta Etapa';
+          dom.btnApproveStage.className = 'btn btn-success-action';
+          dom.btnApproveStage.onclick = () => {
+            if (appKey === 'code_modification') {
+              openCodeApprovalModal();
+            } else {
+              toggleStageApproval(appKey, true);
+            }
+          };
+        }
+      }
+    } else {
+      if (dom.stageApprovalBadge) dom.stageApprovalBadge.classList.add('hidden');
+      if (dom.btnApproveStage) dom.btnApproveStage.classList.add('hidden');
+    }
   }
 }
 
@@ -321,12 +544,16 @@ async function loadArtifactContent(artifactKey) {
   try {
     let content = '';
     if (state.mode === 'workspace') {
-      dom.bcOrigin.textContent = 'Workspace Activo';
+      const pName = state.activeProject?.project_name || 'app';
+      dom.bcOrigin.textContent = `projects/${pName}`;
       const res = await fetch(`/api/artifacts/${artifactKey}`);
       if (!res.ok) {
         throw new Error(`Artefacto '${artifactKey}' aún no ha sido generado en esta etapa.`);
       }
       const data = await res.json();
+      if (data.exists === false) {
+        throw new Error(data.message || `Artefacto '${artifactKey}' aún no ha sido generado para el proyecto '${pName}'.`);
+      }
       content = data.content;
     } else {
       dom.bcOrigin.textContent = `Git: ${state.selectedBranch}`;
@@ -335,7 +562,21 @@ async function loadArtifactContent(artifactKey) {
         throw new Error(`No se encontraron artefactos en la rama '${state.selectedBranch}'.`);
       }
       const data = await res.json();
-      content = data.artifacts[artifactKey] || `El archivo ${artifactKey} no existe en esta rama histórica.`;
+      content = data.artifacts[artifactKey];
+      if (!content && artifactKey === 'patch') {
+        try {
+          const diffRes = await fetch(`/api/git/branch/${encodeURIComponent(state.selectedBranch)}/diff`);
+          if (diffRes.ok) {
+            const diffData = await diffRes.json();
+            if (diffData.diff) {
+              content = "```diff\n" + diffData.diff + "\n```";
+            }
+          }
+        } catch (_) {}
+      }
+      if (!content) {
+        content = `El archivo ${artifactKey} no existe en este commit histórico.`;
+      }
     }
 
     state.rawContent = content;
@@ -406,7 +647,7 @@ function setInspectionMode(mode) {
     loadArtifactContent(state.selectedArtifact);
   } else {
     if (!state.selectedBranch && state.branches.length > 0) {
-      selectGitBranch(state.branches[0].name);
+      selectGitBranch(state.branches[0].commit);
     } else if (state.selectedBranch) {
       selectGitBranch(state.selectedBranch);
     }
@@ -418,56 +659,309 @@ async function loadGitOverview() {
   try {
     const res = await fetch('/api/git/overview');
     const data = await res.json();
-    state.branches = data.branches;
-    dom.branchCount.textContent = data.branches.length;
+    state.branches = data.branches || [];
+    if (dom.branchCount) dom.branchCount.textContent = state.branches.length;
+    if (dom.launcherGitCount) dom.launcherGitCount.textContent = state.branches.length;
 
     dom.branchList.innerHTML = '';
-    data.branches.forEach(b => {
-      const card = document.createElement('div');
-      card.className = `branch-card ${b.name === state.selectedBranch ? 'active' : ''}`;
-      card.innerHTML = `
-        <div class="branch-header">
-          <span class="branch-title">${b.name}</span>
-          <span class="branch-date">${b.date}</span>
-        </div>
-        <div class="branch-commit">#${b.commit}: ${b.subject}</div>
-      `;
-      card.addEventListener('click', () => selectGitBranch(b.name));
-      dom.branchList.appendChild(card);
-    });
+    if (state.branches.length === 0) {
+      dom.branchList.innerHTML = '<div class="empty-state-small">Sin commits aún en este proyecto.</div>';
+    } else {
+      state.branches.forEach(b => {
+        const card = document.createElement('div');
+        card.className = `branch-card ${b.commit === state.selectedBranch ? 'active' : ''}`;
+        card.dataset.commit = b.commit;
+        card.innerHTML = `
+          <div class="branch-header">
+            <span class="branch-title">${escapeHtml(b.subject)}</span>
+            <span class="branch-date">${escapeHtml(b.date)}</span>
+          </div>
+          <div class="branch-commit"><code>#${escapeHtml(b.commit)}</code> ${escapeHtml(b.ref_info ? `· ${b.ref_info}` : '')}</div>
+        `;
+        card.addEventListener('click', () => selectGitBranch(b.commit, b.subject));
+        dom.branchList.appendChild(card);
+      });
+    }
+
+    renderLauncherGitList(state.branches);
   } catch (err) {
-    console.error('Error cargando ramas:', err);
+    console.error('Error cargando git overview:', err);
   }
 }
 
-function selectGitBranch(branchName) {
-  state.selectedBranch = branchName;
-  dom.bannerBranchName.textContent = branchName;
+function renderLauncherGitList(branches) {
+  if (!dom.launcherGitList) return;
+  dom.launcherGitList.innerHTML = '';
+
+  if (!branches || branches.length === 0) {
+    dom.launcherGitList.innerHTML = '<div class="empty-state-small">No hay commits registrados en este proyecto aún.</div>';
+    return;
+  }
+
+  branches.forEach(b => {
+    const item = document.createElement('div');
+    item.className = 'launcher-git-item';
+    item.innerHTML = `
+      <div class="launcher-git-meta">
+        <span class="launcher-git-name">${escapeHtml(b.subject)}</span>
+        <span class="launcher-git-desc">Commit <code>#${escapeHtml(b.commit)}</code> (${escapeHtml(b.date)})</span>
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button class="btn btn-secondary-sm btn-inspect-launcher" data-branch="${escapeHtml(b.commit)}">
+          🔍 Ver en Git
+        </button>
+        <button class="btn btn-warning-sm btn-restore-launcher" data-branch="${escapeHtml(b.commit)}" title="Restaurar este commit en el workspace del proyecto">
+          ⏪ Restaurar
+        </button>
+      </div>
+    `;
+    item.querySelector('.btn-inspect-launcher').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeProjectLauncher();
+      setInspectionMode('git');
+      selectGitBranch(b.commit, b.subject);
+    });
+    item.querySelector('.btn-restore-launcher').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await restoreSpecificBranch(b.commit);
+      closeProjectLauncher();
+    });
+    dom.launcherGitList.appendChild(item);
+  });
+}
+
+function selectGitBranch(commitHash, title) {
+  state.selectedBranch = commitHash;
+  const commitObj = state.branches.find(b => b.commit === commitHash);
+  const displayTitle = title || (commitObj ? commitObj.subject : commitHash);
+  dom.bannerBranchName.textContent = `${displayTitle} (#${commitHash})`;
   dom.gitBranchBanner.classList.remove('hidden');
 
   document.querySelectorAll('.branch-card').forEach(card => {
-    const isThis = card.querySelector('.branch-title')?.textContent === branchName;
-    card.classList.toggle('active', isThis);
+    card.classList.toggle('active', card.dataset.commit === commitHash);
   });
 
   loadArtifactContent(state.selectedArtifact);
   updateNextStepSuggestion();
 }
 
-async function restoreCurrentBranch() {
-  if (!state.selectedBranch) return;
-  if (!confirm(`¿Deseas restaurar la aplicación de '${state.selectedBranch}' en el Workspace actual? Se creará una copia de seguridad automática previa.`)) return;
+async function restoreSpecificBranch(branchName) {
+  const pName = state.activeProject?.project_name || 'proyecto actual';
+  if (!confirm(`¿Deseas restaurar los archivos del proyecto '${pName}' al commit '${branchName}'?\n\nSoftFactory permanecerá 100% intacta.`)) return;
 
   try {
-    const res = await fetch(`/api/git/branch/${encodeURIComponent(state.selectedBranch)}/restore`, { method: 'POST' });
+    const res = await fetch(`/api/git/branch/${encodeURIComponent(branchName)}/restore`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Fallo al restaurar');
     showToast(data.message, 'success');
     setInspectionMode('workspace');
     await loadStatus();
+    loadArtifactContent('discovery_notes');
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+async function restoreCurrentBranch() {
+  if (!state.selectedBranch) return;
+  await restoreSpecificBranch(state.selectedBranch);
+}
+
+// --- GESTIÓN DE PROYECTOS AISLADOS (MULTI-PROJECT HUB) ---
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function renderProjectsGrid(projects, activeName) {
+  if (!dom.launcherProjectsGrid) return;
+  if (!projects || projects.length === 0) {
+    dom.launcherProjectsGrid.innerHTML = `
+      <div style="grid-column: 1 / -1; text-align: center; padding: 24px; color: var(--text-dim);">
+        No hay proyectos en <code>projects/</code>. Haz clic en <strong>Nuevo Proyecto</strong> para comenzar.
+      </div>`;
+    return;
+  }
+
+  dom.launcherProjectsGrid.innerHTML = projects.map(p => {
+    const isActive = (p.name === activeName);
+    return `
+      <div class="project-card ${isActive ? 'active-project' : ''}">
+        <div class="project-card-header">
+          <div class="project-card-title">
+            <span>📁</span> <strong>${escapeHtml(p.name)}</strong>
+          </div>
+          ${isActive ? '<span class="badge-active-tag">Activo</span>' : ''}
+        </div>
+        <div class="project-card-path">projects/${escapeHtml(p.name)}</div>
+        <div class="project-card-stats">
+          <span>⚡ <strong style="color: #a5b4fc;">${escapeHtml(p.status)}</strong></span>
+          <span>📄 ${p.workspace_files_count} archivos</span>
+        </div>
+        <div style="font-size: 0.72rem; color: var(--text-dim);">
+          Etapas: ${p.completed_stages}/5 completadas · Modif: ${p.modified_at}
+        </div>
+        <div class="project-card-actions">
+          <button class="btn-open-proj" onclick="selectProject('${escapeHtml(p.name)}')">
+            ${isActive ? '✓ Proyecto Activo' : '📂 Abrir Proyecto'}
+          </button>
+          <button class="btn-delete-proj" title="Eliminar carpeta del proyecto del disco" onclick="deleteProject('${escapeHtml(p.name)}')">
+            🗑️
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function loadProjects() {
+  try {
+    const res = await fetch('/api/projects');
+    const data = await res.json();
+    state.projects = data.projects || [];
+    renderProjectsGrid(state.projects, data.active_project);
+  } catch (err) {
+    console.error('Error al cargar lista de proyectos:', err);
+  }
+}
+
+async function selectProject(projectName) {
+  try {
+    const res = await fetch('/api/projects/select', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_name: projectName }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al seleccionar proyecto');
+    showToast(data.message, 'success');
+    closeProjectLauncher();
+    await loadStatus();
+    await loadGitOverview();
+    loadArtifactContent('discovery_notes');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function deleteProject(projectName) {
+  if (!confirm(`¿Estás seguro de que deseas eliminar permanentemente la carpeta projects/${projectName}/ y todo su contenido?\n\nLa Software Factory y los demás proyectos permanecerán intactos.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al eliminar proyecto');
+    showToast(data.message, 'success');
+    await loadStatus();
+    await loadProjects();
+    loadArtifactContent('discovery_notes');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+window.selectProject = selectProject;
+window.deleteProject = deleteProject;
+
+// --- CONTROLES DEL LANZADOR DE SESIÓN (PROYECTOS) ---
+function openProjectLauncher() {
+  if (dom.modalProjectLauncher) {
+    dom.modalProjectLauncher.classList.remove('hidden');
+    loadProjects();
+  }
+}
+
+function closeProjectLauncher() {
+  if (dom.modalProjectLauncher) {
+    dom.modalProjectLauncher.classList.add('hidden');
+    sessionStorage.setItem('launcher_dismissed', 'true');
+  }
+}
+
+if (dom.btnOpenLauncher) dom.btnOpenLauncher.addEventListener('click', openProjectLauncher);
+if (dom.btnCloseLauncher) dom.btnCloseLauncher.addEventListener('click', closeProjectLauncher);
+if (dom.btnLauncherContinue) dom.btnLauncherContinue.addEventListener('click', closeProjectLauncher);
+if (dom.btnLauncherNewApp) {
+  dom.btnLauncherNewApp.addEventListener('click', () => {
+    closeProjectLauncher();
+    openNewAppConfirmation();
+  });
+}
+
+// --- CONTROLES DEL LAZO DE MANTENIMIENTO ---
+function openMaintenanceModal() {
+  if (dom.modalMaintenance) {
+    dom.modalMaintenance.classList.remove('hidden');
+  }
+}
+
+function closeMaintenanceModal() {
+  if (dom.modalMaintenance) {
+    dom.modalMaintenance.classList.add('hidden');
+  }
+}
+
+if (dom.btnOpenMaintenance) dom.btnOpenMaintenance.addEventListener('click', openMaintenanceModal);
+if (dom.btnCloseMaintenance) dom.btnCloseMaintenance.addEventListener('click', closeMaintenanceModal);
+if (dom.btnCancelMaintenance) dom.btnCancelMaintenance.addEventListener('click', closeMaintenanceModal);
+
+if (dom.btnSubmitMaintenance) {
+  dom.btnSubmitMaintenance.addEventListener('click', async () => {
+    const request_type = document.getElementById('maint-type').value;
+    const title = document.getElementById('maint-title').value.trim();
+    const description = document.getElementById('maint-desc').value.trim();
+
+    if (!title || !description) {
+      alert('Por favor ingresa un título y una descripción detallada para la solicitud de mantenimiento.');
+      return;
+    }
+
+    dom.btnSubmitMaintenance.disabled = true;
+    dom.btnSubmitMaintenance.textContent = 'Registrando Solicitud...';
+
+    try {
+      const res = await fetch('/api/actions/maintenance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ request_type, title, description }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al registrar mantenimiento');
+
+      showToast(data.message, 'success');
+      closeMaintenanceModal();
+      document.getElementById('maint-title').value = '';
+      document.getElementById('maint-desc').value = '';
+      await loadStatus();
+      loadArtifactContent('delta_requirement');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      dom.btnSubmitMaintenance.disabled = false;
+      dom.btnSubmitMaintenance.textContent = '🚀 Activar Lazo de Mantenimiento';
+    }
+  });
+}
+
+// --- CONTROLES DE LA COMPUERTA DE APROBACIÓN DE CÓDIGO ---
+if (dom.btnCloseCodeApproval) dom.btnCloseCodeApproval.addEventListener('click', closeCodeApprovalModal);
+if (dom.btnRejectCodeApproval) {
+  dom.btnRejectCodeApproval.addEventListener('click', async () => {
+    await toggleStageApproval('code_modification', false);
+    closeCodeApprovalModal();
+  });
+}
+if (dom.btnConfirmCodeApproval) {
+  dom.btnConfirmCodeApproval.addEventListener('click', async () => {
+    await toggleStageApproval('code_modification', true);
+    closeCodeApprovalModal();
+  });
 }
 
 // --- WIZARD POR RONDAS: "Nueva App (Grill-Me)" ---
@@ -482,11 +976,50 @@ dom.btnCancelNewConfirm.addEventListener('click', () => dom.modalNewAppConfirm.c
 
 dom.btnAcceptNewConfirm.addEventListener('click', () => {
   dom.modalNewAppConfirm.classList.add('hidden');
-  openGrillWizard();
+  openGrillWizard('new_app');
 });
 
-function openGrillWizard() {
+function openGrillWizard(mode = 'active_project') {
+  state.grillMode = mode;
   state.wizardStep = 1;
+
+  const projInput = document.getElementById('grill-proj-name');
+  const projHint = document.getElementById('grill-proj-hint');
+  const projLabel = document.getElementById('lbl-grill-proj-name');
+  const modalTitle = document.querySelector('#modal-grill .modal-title-group h3');
+  const modalSub = document.querySelector('#modal-grill .modal-title-group p');
+  const promptInput = document.getElementById('grill-prompt');
+
+  const activeName = state.activeProject?.project_name || 'app';
+
+  if (mode === 'active_project') {
+    if (modalTitle) modalTitle.textContent = `✨ Elicitación Grill-Me (Etapa 1): ${activeName}`;
+    if (modalSub) modalSub.textContent = `Definiendo decisiones y contrato para el proyecto seleccionado '${activeName}'.`;
+    if (projLabel) projLabel.innerHTML = `<strong>Proyecto Seleccionado:</strong>`;
+    if (projInput) {
+      projInput.value = activeName;
+      projInput.disabled = true;
+    }
+    if (projHint) projHint.innerHTML = `🔒 Se ejecutará sobre el proyecto activo <code>projects/${escapeHtml(activeName)}/</code> sin crear nuevos proyectos ni reiniciar nada.`;
+    
+    // Si el proyecto tiene requerimiento inicial guardado, pre-cargar si el campo está vacío
+    if (!promptInput.value.trim() && state.activeProject?.context?.project_metadata?.seed_requirement) {
+      promptInput.value = state.activeProject.context.project_metadata.seed_requirement;
+    }
+  } else {
+    // Modo: 'new_app' (disparado exclusivamente desde "Nueva App")
+    if (modalTitle) modalTitle.textContent = '✨ Nuevo Proyecto Aislado (Grill-Me)';
+    if (modalSub) modalSub.textContent = 'Aislamiento total en carpeta dedicada dentro de projects/. SoftFactory no se modifica.';
+    if (projLabel) projLabel.innerHTML = `<strong>Nombre del Nuevo Proyecto:</strong>`;
+    if (projInput) {
+      projInput.value = '';
+      projInput.disabled = false;
+      projInput.placeholder = 'Ej: Inventario Taller';
+    }
+    if (projHint) projHint.innerHTML = `📁 Se creará la carpeta aislada <code>projects/&lt;nombre&gt;/</code> sin alterar archivos de SoftFactory.`;
+    promptInput.value = '';
+  }
+
   showWizardStep(1);
   dom.modalGrill.classList.remove('hidden');
 }
@@ -540,24 +1073,43 @@ function buildWizardSummary() {
   const errors = document.getElementById('grill-opt-errors').value;
   const persistence = document.getElementById('grill-opt-persistence').value;
   const caching = document.getElementById('grill-opt-caching').value;
-  const projName = document.getElementById('grill-proj-name').value.trim() || 'nueva_app';
+  const isNew = (state.grillMode === 'new_app');
+  const projName = isNew 
+    ? (document.getElementById('grill-proj-name').value.trim() || 'nueva_app')
+    : (state.activeProject?.project_name || 'app');
   const prompt = document.getElementById('grill-prompt').value.trim();
 
   dom.grillSummaryContent.innerHTML = `
-    <div><strong>Proyecto:</strong> <code>${projName}</code></div>
-    <div><strong>Requerimiento:</strong> "${prompt}"</div>
-    <div><strong>Plataforma / Interfaz:</strong> ${platform}</div>
-    <div><strong>Entidades:</strong> ${entities}</div>
-    <div><strong>Autenticación:</strong> ${auth}</div>
-    <div><strong>Persistencia:</strong> ${persistence}</div>
-    <div><strong>Caché:</strong> ${caching}</div>
-    <div><strong>Manejo de Errores:</strong> ${errors}</div>
+    <div><strong>Modo:</strong> <span class="badge-${isNew ? 'initialized' : 'active-tag'}">${isNew ? 'Nuevo Proyecto' : 'Proyecto Activo'}</span></div>
+    <div><strong>Proyecto:</strong> <code>projects/${escapeHtml(projName)}/</code></div>
+    <div><strong>Requerimiento:</strong> "${escapeHtml(prompt)}"</div>
+    <div><strong>Plataforma / Interfaz:</strong> ${escapeHtml(platform)}</div>
+    <div><strong>Entidades:</strong> ${escapeHtml(entities)}</div>
+    <div><strong>Autenticación:</strong> ${escapeHtml(auth)}</div>
+    <div><strong>Persistencia:</strong> ${escapeHtml(persistence)}</div>
+    <div><strong>Caché:</strong> ${escapeHtml(caching)}</div>
+    <div><strong>Manejo de Errores:</strong> ${escapeHtml(errors)}</div>
   `;
 }
 
 dom.btnWizardSubmit.addEventListener('click', async () => {
   const prompt = document.getElementById('grill-prompt').value.trim();
-  const projName = document.getElementById('grill-proj-name').value.trim() || 'nueva_app';
+  const isNew = (state.grillMode === 'new_app');
+  let projName = '';
+
+  if (isNew) {
+    projName = document.getElementById('grill-proj-name').value.trim();
+    if (!projName) {
+      alert('Ingresa un nombre para el nuevo proyecto.');
+      return;
+    }
+  } else {
+    projName = state.activeProject?.project_name;
+    if (!projName) {
+      alert('No hay un proyecto activo seleccionado.');
+      return;
+    }
+  }
 
   const answers = {
     api_style: document.getElementById('grill-opt-platform').options[document.getElementById('grill-opt-platform').selectedIndex].text,
@@ -572,7 +1124,7 @@ dom.btnWizardSubmit.addEventListener('click', async () => {
   };
 
   dom.btnWizardSubmit.disabled = true;
-  dom.btnWizardSubmit.textContent = 'Respaldando y Reiniciando...';
+  dom.btnWizardSubmit.textContent = isNew ? 'Creando Nuevo Proyecto...' : 'Generando Discovery...';
 
   try {
     const res = await fetch('/api/actions/interview', {
@@ -581,17 +1133,22 @@ dom.btnWizardSubmit.addEventListener('click', async () => {
       body: JSON.stringify({
         prompt,
         answers,
-        reset_first: true,
+        reset_first: isNew,
         project_name: projName,
       }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Error en Discovery');
 
-    showToast('¡Fase 0 completada! Contrato congelado en DISCOVERY_NOTES.md.', 'success');
+    showToast(isNew 
+      ? `¡Proyecto '${projName}' creado y contrato congelado en DISCOVERY_NOTES.md!` 
+      : `¡Discovery completado para '${projName}' y contrato congelado en DISCOVERY_NOTES.md!`, 
+      'success'
+    );
     dom.modalGrill.classList.add('hidden');
     setInspectionMode('workspace');
     await loadStatus();
+    await loadGitOverview();
     loadArtifactContent('discovery_notes');
   } catch (err) {
     showToast(err.message, 'error');
@@ -636,6 +1193,15 @@ dom.btnConfirmReset.addEventListener('click', async () => {
   }
 });
 
+if (dom.btnDeleteActiveProject) {
+  dom.btnDeleteActiveProject.addEventListener('click', async () => {
+    const currName = state.activeProject?.project_name;
+    if (!currName) return;
+    dom.modalReset.classList.add('hidden');
+    await deleteProject(currName);
+  });
+}
+
 // --- Event Listeners Globales ---
 dom.toggleWorkspace.addEventListener('click', () => setInspectionMode('workspace'));
 dom.toggleGit.addEventListener('click', () => setInspectionMode('git'));
@@ -674,4 +1240,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadStatus();
   await loadGitOverview();
   loadArtifactContent('discovery_notes');
+
+  // Si no se ha descartado el lanzador en esta sesión, abrir el diálogo de selección inicial
+  if (!sessionStorage.getItem('launcher_dismissed')) {
+    openProjectLauncher();
+  }
 });

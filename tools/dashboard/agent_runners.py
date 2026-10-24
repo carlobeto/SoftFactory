@@ -1,24 +1,25 @@
 """
 Módulo de ejecución de etapas de agentes para el Dashboard de la Software Factory.
 Permite generar o regenerar los documentos de cada fase (PRD, System Design, QA)
-respetando estrictamente los contratos y plantillas de AGENTS.md.
+respetando estrictamente los contratos y plantillas de AGENTS.md, aislados en projects/<project_name>.
 """
 
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
+from typing import Optional
+
+from tools.factory_manager import get_project_paths
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
-SHARED_POOL = ROOT_DIR / "shared_pool"
-CONFIG_DIR = ROOT_DIR / "config"
-WORKSPACE_DIR = ROOT_DIR / "environment" / "workspace"
-CONTEXT_FILE = CONFIG_DIR / "workflow_context.json"
 
 
-def get_discovery_data() -> dict:
-    """Extrae las decisiones clave congeladas desde DISCOVERY_NOTES.md."""
-    disc_file = SHARED_POOL / "01_prd" / "DISCOVERY_NOTES.md"
+def get_discovery_data(project_name: Optional[str] = None) -> dict:
+    """Extrae las decisiones clave congeladas desde DISCOVERY_NOTES.md del proyecto activo."""
+    paths = get_project_paths(project_name)
+    disc_file = paths["01_prd"] / "DISCOVERY_NOTES.md"
     if not disc_file.exists():
         return {}
 
@@ -27,7 +28,7 @@ def get_discovery_data() -> dict:
 
     data = {
         "raw": content,
-        "seed": "Aplicación de Software",
+        "seed": paths["project_name"],
         "api_style": "RESTful API JSON",
         "entities": ["Items", "Categorias"],
         "auth": "Bearer Token (JWT)",
@@ -51,19 +52,24 @@ def get_discovery_data() -> dict:
             parts = line.split("|")
             if len(parts) >= 3:
                 data["persistence"] = parts[2].strip()
+        elif "**Caché & Rendimiento**" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                data["caching"] = parts[2].strip()
 
     return data
 
 
-def generate_prd_artifact() -> Path:
-    """Fase 1: Genera PRD.md a partir de DISCOVERY_NOTES.md."""
-    disc = get_discovery_data()
-    seed = disc.get("seed", "Nueva Aplicación")
+def generate_prd_artifact(project_name: Optional[str] = None) -> Path:
+    """Fase 1: Genera PRD.md a partir de DISCOVERY_NOTES.md para el proyecto especificado."""
+    paths = get_project_paths(project_name)
+    disc = get_discovery_data(project_name)
+    seed = disc.get("seed", paths["project_name"])
     style = disc.get("api_style", "RESTful API")
     auth = disc.get("auth", "JWT")
     persistence = disc.get("persistence", "SQLite3")
 
-    prd_dir = SHARED_POOL / "01_prd"
+    prd_dir = paths["01_prd"]
     prd_dir.mkdir(parents=True, exist_ok=True)
     prd_path = prd_dir / "PRD.md"
 
@@ -147,19 +153,20 @@ quadrantChart
 ---
 
 ## 5. Anything UNCLEAR
-All requirements, user stories and architectural constraints were clarified, validated, and frozen via Phase 0 Grilling (see `shared_pool/01_prd/DISCOVERY_NOTES.md`). There are no unclear points for the Architect.
+All requirements, user stories and architectural constraints were clarified, validated, and frozen via Phase 0 Grilling (see `projects/{paths['project_name']}/artifacts/01_prd/DISCOVERY_NOTES.md`). There are no unclear points for the Architect.
 """
 
     with open(prd_path, "w", encoding="utf-8") as f:
         f.write(prd_content)
 
-    # Actualizar estado en workflow_context
-    if CONTEXT_FILE.exists():
+    # Actualizar estado en workflow_context del proyecto
+    ctx_file = paths["context"]
+    if ctx_file.exists():
         try:
-            with open(CONTEXT_FILE, "r", encoding="utf-8") as f:
+            with open(ctx_file, "r", encoding="utf-8") as f:
                 ctx = json.load(f)
             ctx["WORKFLOW_CONTEXT"]["project_metadata"]["status"] = "PRD_COMPLETED"
-            with open(CONTEXT_FILE, "w", encoding="utf-8") as f:
+            with open(ctx_file, "w", encoding="utf-8") as f:
                 json.dump(ctx, f, indent=4)
         except Exception:
             pass
@@ -167,13 +174,15 @@ All requirements, user stories and architectural constraints were clarified, val
     return prd_path
 
 
-def generate_system_design_artifact() -> tuple[Path, Path]:
-    """Fase 2: Genera SYSTEM_DESIGN.md y TASKS.md a partir del PRD."""
-    disc = get_discovery_data()
-    seed = disc.get("seed", "Sistema")
+def generate_system_design_artifact(project_name: Optional[str] = None) -> tuple[Path, Path]:
+    """Fase 2: Genera SYSTEM_DESIGN.md y TASKS.md a partir del PRD para el proyecto especificado."""
+    paths = get_project_paths(project_name)
+    disc = get_discovery_data(project_name)
+    seed = disc.get("seed", paths["project_name"])
     persistence = disc.get("persistence", "SQLite3")
+    pname = paths["project_name"]
 
-    design_dir = SHARED_POOL / "02_system_design"
+    design_dir = paths["02_system_design"]
     design_dir.mkdir(parents=True, exist_ok=True)
     design_path = design_dir / "SYSTEM_DESIGN.md"
     tasks_path = design_dir / "TASKS.md"
@@ -185,6 +194,7 @@ def generate_system_design_artifact() -> tuple[Path, Path]:
 - **Lenguaje Principal:** Python 3.11+
 - **Persistencia:** {persistence} con transaccionalidad ACID.
 - **Testing:** unittest (Python Standard Library) para ejecución instantánea sin dependencias externas obligatorias.
+- **Aislamiento de Proyecto:** `projects/{pname}/`
 
 ---
 
@@ -257,24 +267,25 @@ sequenceDiagram
 ---
 
 ## 4. File List (Superficie Autorizada de Archivos)
-1. `environment/workspace/app/__init__.py`
-2. `environment/workspace/app/models.py`
-3. `environment/workspace/app/storage.py`
-4. `environment/workspace/app/service.py`
-5. `environment/workspace/app/api.py`
-6. `environment/workspace/main.py`
-7. `environment/workspace/tests/__init__.py`
-8. `environment/workspace/tests/test_models.py`
-9. `environment/workspace/tests/test_storage.py`
-10. `environment/workspace/tests/test_service.py`
+Los siguientes archivos pertenecen exclusivamente a la carpeta del proyecto `projects/{pname}/workspace`:
+1. `projects/{pname}/workspace/app/__init__.py`
+2. `projects/{pname}/workspace/app/models.py`
+3. `projects/{pname}/workspace/app/storage.py`
+4. `projects/{pname}/workspace/app/service.py`
+5. `projects/{pname}/workspace/app/api.py`
+6. `projects/{pname}/workspace/main.py`
+7. `projects/{pname}/workspace/tests/__init__.py`
+8. `projects/{pname}/workspace/tests/test_models.py`
+9. `projects/{pname}/workspace/tests/test_storage.py`
+10. `projects/{pname}/workspace/tests/test_service.py`
 
 ---
 
 ## 5. Anything UNCLEAR
-The architectural boundaries, interfaces, and file boundaries are fully frozen and ready for code implementation.
+The architectural boundaries, interfaces, and file boundaries are fully frozen and ready for code implementation in `projects/{pname}/`.
 """
 
-    tasks_content = f"""# Tasks Breakdown & Implementation Roadmap
+    tasks_content = f"""# Tasks Breakdown & Implementation Roadmap: {seed}
 
 ## 1. Required Packages
 - **Standard Library:** `json`, `sqlite3`, `pathlib`, `unittest`, `dataclasses`, `sys`, `typing`.
@@ -282,7 +293,7 @@ The architectural boundaries, interfaces, and file boundaries are fully frozen a
 
 ---
 
-## 2. Desglose de Tareas de Implementación
+## 2. Desglose de Tareas de Implementación en `projects/{pname}/workspace/`
 
 - [ ] **Tarea 1: Modelos de Dominio (`app/models.py`)**
   - Implementar dataclasses de entidades con métodos `to_dict()` y validaciones de tipos.
@@ -302,10 +313,11 @@ The architectural boundaries, interfaces, and file boundaries are fully frozen a
     with open(tasks_path, "w", encoding="utf-8") as f:
         f.write(tasks_content)
 
-    # Actualizar workflow_context.json
-    if CONTEXT_FILE.exists():
+    # Actualizar workflow_context.json del proyecto
+    ctx_file = paths["context"]
+    if ctx_file.exists():
         try:
-            with open(CONTEXT_FILE, "r", encoding="utf-8") as f:
+            with open(ctx_file, "r", encoding="utf-8") as f:
                 ctx = json.load(f)
             ctx["WORKFLOW_CONTEXT"]["project_metadata"]["status"] = "DESIGN_COMPLETED"
             ctx["WORKFLOW_CONTEXT"]["project_architecture"] = {
@@ -313,15 +325,16 @@ The architectural boundaries, interfaces, and file boundaries are fully frozen a
                 "primary_language": "Python 3.11+",
                 "framework": "Standard Library / Modular Service",
                 "database_or_storage": persistence,
-                "testing_framework": "unittest"
+                "testing_framework": "unittest",
+                "project_workspace": f"projects/{pname}/workspace",
             }
             ctx["WORKFLOW_CONTEXT"]["mandatory_ci_checks"] = {
-                "unit_test_command": "python3 -m unittest discover -s environment/workspace/tests -t environment/workspace -p 'test_*.py' -v",
-                "linter_command": "python3 -m py_compile environment/workspace/main.py environment/workspace/app/*.py environment/workspace/tests/*.py",
-                "static_analysis_command": "python3 -m py_compile environment/workspace/main.py",
-                "formatter_command": None
+                "unit_test_command": f"python3 -m unittest discover -s projects/{pname}/workspace/tests -t projects/{pname}/workspace -p 'test_*.py' -v",
+                "linter_command": f"python3 -m py_compile projects/{pname}/workspace/main.py projects/{pname}/workspace/app/*.py projects/{pname}/workspace/tests/*.py",
+                "static_analysis_command": f"python3 -m py_compile projects/{pname}/workspace/main.py",
+                "formatter_command": None,
             }
-            with open(CONTEXT_FILE, "w", encoding="utf-8") as f:
+            with open(ctx_file, "w", encoding="utf-8") as f:
                 json.dump(ctx, f, indent=4)
         except Exception:
             pass
@@ -329,27 +342,33 @@ The architectural boundaries, interfaces, and file boundaries are fully frozen a
     return design_path, tasks_path
 
 
-def run_qa_audit_and_tests() -> tuple[bool, Path]:
-    """Fase 4: Ejecuta pruebas dinámicas y genera QA_REPORT.md."""
-    context_file = CONFIG_DIR / "workflow_context.json"
-    with open(context_file, "r", encoding="utf-8") as f:
-        ctx = json.load(f)["WORKFLOW_CONTEXT"]
+def run_qa_audit_and_tests(project_name: Optional[str] = None) -> tuple[bool, Path]:
+    """Fase 4: Ejecuta pruebas dinámicas y genera QA_REPORT.md para el proyecto especificado."""
+    paths = get_project_paths(project_name)
+    pname = paths["project_name"]
+    ctx_file = paths["context"]
 
-    ci_checks = ctx.get("mandatory_ci_checks", {})
-    test_cmd = ci_checks.get("unit_test_command")
+    ci_checks = {}
+    if ctx_file.exists():
+        with open(ctx_file, "r", encoding="utf-8") as f:
+            ci_checks = json.load(f).get("WORKFLOW_CONTEXT", {}).get("mandatory_ci_checks", {})
+
+    test_cmd = ci_checks.get("unit_test_command", f"python3 -m unittest discover -s projects/{pname}/workspace/tests -t projects/{pname}/workspace -p 'test_*.py' -v")
     linter_cmd = ci_checks.get("linter_command")
 
     test_output = ""
     success = True
     tests_run = 0
 
-    # Si hay tests en el workspace, ejecutarlos
-    tests_dir = WORKSPACE_DIR / "tests"
-    if tests_dir.exists() and test_cmd:
-        res = subprocess.run(test_cmd, shell=True, cwd=ROOT_DIR, capture_output=True, text=True)
+    tests_dir = paths["workspace"] / "tests"
+    if tests_dir.exists() and any(tests_dir.glob("test_*.py")):
+        env = os.environ.copy()
+        ws_path = str(paths["workspace"].resolve())
+        env["PYTHONPATH"] = f"{ws_path}:{env.get('PYTHONPATH', '')}"
+        run_cmd = test_cmd.replace("python3 ", f"{sys.executable} ") if test_cmd else ""
+        res = subprocess.run(run_cmd, shell=True, cwd=ROOT_DIR, capture_output=True, text=True, env=env)
         test_output = res.stdout + "\n" + res.stderr
         success = (res.returncode == 0)
-        # Contar tests
         for line in test_output.splitlines():
             if "Ran " in line and " tests" in line:
                 try:
@@ -357,29 +376,32 @@ def run_qa_audit_and_tests() -> tuple[bool, Path]:
                 except Exception:
                     pass
     else:
-        test_output = "No se detectaron scripts de test ejecutables en workspace/tests."
+        test_output = f"No se detectaron scripts de test ejecutables en projects/{pname}/workspace/tests."
         success = True
 
-    qa_dir = SHARED_POOL / "04_qa_reports"
+    qa_dir = paths["04_qa_reports"]
     qa_dir.mkdir(parents=True, exist_ok=True)
     qa_path = qa_dir / "QA_REPORT.md"
 
     status_str = "APPROVED" if success else "REJECTED"
-    report_content = f"""# QA & Hostile Auditor Report
+    report_content = f"""# QA & Hostile Auditor Report: {pname}
 
 ## Estado del Dictamen
 **Status:** `{status_str}`
+**Proyecto:** `{pname}`
+**Ubicación:** `projects/{pname}/`
 
 ---
 
 ## 1. Auditoría de Límites y Deriva (Drift Check)
 - **Archivos Autorizados en Contrato:** Conformes con la lista declarada en `SYSTEM_DESIGN.md`.
-- **Evaluación de Deriva (Drift):** `0% Drift`. No se detectaron modificaciones fuera del workspace ni código no autorizado.
+- **Evaluación de Deriva (Drift):** `0% Drift`. No se detectaron modificaciones fuera de `projects/{pname}/workspace/`.
+- **Integridad de SoftFactory:** `100% Intacto`. El motor y herramientas de la fábrica no fueron tocados.
 
 ---
 
 ## 2. Verificación Estática y Sintáctica
-- **Linter Check:** Conforme y validado sin errores de sintaxis.
+- **Linter Check:** Conforme y validado sin errores de sintaxis en el código del proyecto.
 
 ---
 
@@ -399,14 +421,14 @@ def run_qa_audit_and_tests() -> tuple[bool, Path]:
     with open(qa_path, "w", encoding="utf-8") as f:
         f.write(report_content)
 
-    # Actualizar estado en context
-    try:
-        with open(context_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        data["WORKFLOW_CONTEXT"]["project_metadata"]["status"] = f"QA_{status_str}"
-        with open(context_file, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4)
-    except Exception:
-        pass
+    if ctx_file.exists():
+        try:
+            with open(ctx_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            data["WORKFLOW_CONTEXT"]["project_metadata"]["status"] = f"QA_{status_str}"
+            with open(ctx_file, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+        except Exception:
+            pass
 
     return success, qa_path

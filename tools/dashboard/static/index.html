@@ -38,8 +38,14 @@
       </div>
 
       <div class="header-actions">
+        <button id="btn-open-launcher" class="btn btn-secondary" title="Abrir selector de proyectos (Cargar de Git o Crear Nuevo)">
+          📂 Proyectos
+        </button>
         <button id="btn-open-new-app" class="btn btn-primary" title="Iniciar un nuevo proyecto con asistente Grill-Me">
           ✨ Nueva App
+        </button>
+        <button id="btn-open-maintenance" class="btn btn-secondary" title="Solicitar corrección o nueva funcionalidad (Lazo de Mantenimiento)">
+          🛠️ Mantenimiento
         </button>
         <button id="btn-export-app" class="btn btn-secondary" title="Exportar y empaquetar aplicación actual">
           📦 Exportar
@@ -50,10 +56,10 @@
       </div>
     </header>
 
-    <!-- Pipeline Visual de 5 Etapas -->
+    <!-- Pipeline Visual de 5 Etapas (1 a 5) -->
     <nav class="pipeline-stepper" aria-label="Progreso de las etapas">
       <div class="step-card" id="step-discovery" data-stage="discovery_notes">
-        <div class="step-number">0</div>
+        <div class="step-number">1</div>
         <div class="step-info">
           <div class="step-title">Discovery & Grilling</div>
           <div class="step-sub">DISCOVERY_NOTES.md</div>
@@ -64,7 +70,7 @@
       <div class="step-arrow">➔</div>
 
       <div class="step-card" id="step-prd" data-stage="prd">
-        <div class="step-number">1</div>
+        <div class="step-number">2</div>
         <div class="step-info">
           <div class="step-title">Product Manager</div>
           <div class="step-sub">PRD.md & User Stories</div>
@@ -75,7 +81,7 @@
       <div class="step-arrow">➔</div>
 
       <div class="step-card" id="step-system_design" data-stage="system_design">
-        <div class="step-number">2</div>
+        <div class="step-number">3</div>
         <div class="step-info">
           <div class="step-title">Arquitecto</div>
           <div class="step-sub">SYSTEM_DESIGN.md</div>
@@ -86,7 +92,7 @@
       <div class="step-arrow">➔</div>
 
       <div class="step-card" id="step-patch" data-stage="patch">
-        <div class="step-number">3</div>
+        <div class="step-number">4</div>
         <div class="step-info">
           <div class="step-title">Programador</div>
           <div class="step-sub">Código & model.patch</div>
@@ -97,7 +103,7 @@
       <div class="step-arrow">➔</div>
 
       <div class="step-card" id="step-qa_report" data-stage="qa_report">
-        <div class="step-number">4</div>
+        <div class="step-number">5</div>
         <div class="step-info">
           <div class="step-title">QA Hostile Auditor</div>
           <div class="step-sub">QA_REPORT.md & Tests</div>
@@ -118,14 +124,14 @@
               <span class="icon">💻</span> Workspace Activo
             </button>
             <button id="toggle-git" class="source-btn">
-              <span class="icon">🌿</span> Ramas Git (<span id="branch-count">0</span>)
+              <span class="icon">🌿</span> Git del Proyecto (<span id="branch-count">0</span>)
             </button>
           </div>
         </div>
 
-        <!-- Lista de Ramas Git -->
+        <!-- Lista de Checkpoints Git del Proyecto -->
         <div class="sidebar-section git-branches-container hidden" id="git-branches-section">
-          <h2 class="sidebar-heading">Proyectos en Git</h2>
+          <h2 class="sidebar-heading">Checkpoints / Commits de la App</h2>
           <div class="branch-list" id="branch-list">
             <!-- Inyectado dinámicamente -->
           </div>
@@ -137,6 +143,9 @@
           <ul class="artifact-tree" id="artifact-tree">
             <li class="artifact-item active" data-artifact="discovery_notes">
               <span class="file-icon">📋</span> DISCOVERY_NOTES.md
+            </li>
+            <li class="artifact-item hidden" id="item-delta-req" data-artifact="delta_requirement">
+              <span class="file-icon">🛠️</span> DELTA_REQUIREMENT.txt
             </li>
             <li class="artifact-item" data-artifact="prd">
               <span class="file-icon">📄</span> PRD.md
@@ -186,15 +195,23 @@
           </div>
         </div>
 
-        <!-- Barra de Acción de la Etapa (Permite Generar o Regenerar Documentos) -->
+        <!-- Barra de Acción de la Etapa (Permite Generar, Regenerar y Aprobar Documentos) -->
         <div class="stage-action-toolbar" id="stage-action-toolbar">
           <div class="stage-action-info">
-            <span class="stage-action-tag" id="stage-action-tag">Fase 1: Product Manager</span>
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 4px;">
+              <span class="stage-action-tag" id="stage-action-tag">Etapa 2: Product Manager</span>
+              <span class="approval-badge badge-pending-approval" id="stage-approval-badge">⏳ Requiere Aprobación Humana</span>
+            </div>
             <span class="stage-action-desc" id="stage-action-desc">Genera el PRD.md a partir de las decisiones congeladas en Discovery.</span>
           </div>
-          <button class="btn btn-accent-action" id="btn-stage-action">
-            🚀 Generar Documento de Esta Etapa
-          </button>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button class="btn btn-success-action" id="btn-approve-stage" title="Aprobar formalmente esta etapa y autorizar la siguiente fase">
+              ✅ Aprobar Etapa
+            </button>
+            <button class="btn btn-accent-action" id="btn-stage-action">
+              🚀 Generar Documento de Esta Etapa
+            </button>
+          </div>
         </div>
 
         <!-- Banner de Rama Histórica Git -->
@@ -233,24 +250,78 @@
     </main>
   </div>
 
+  <!-- MODAL 0: Gestor de Proyectos Aislados -->
+  <div class="modal-backdrop hidden" id="modal-project-launcher">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>📂 Gestor de Proyectos de la Software Factory</h3>
+          <p class="modal-subtitle">Cada proyecto se almacena de forma 100% aislada en <code>projects/&lt;nombre&gt;</code>. SoftFactory no se modifica.</p>
+        </div>
+        <button class="modal-close" id="btn-close-launcher">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="projects-hub-header">
+          <div>
+            <h4 style="font-size: 0.95rem; color: #fff; margin-bottom: 2px;">Proyectos Locales en <code>projects/</code></h4>
+            <span style="font-size: 0.78rem; color: var(--text-dim);">Puedes crear proyectos, alternar entre ellos o eliminarlos sin afectar la fábrica.</span>
+          </div>
+          <button class="btn btn-primary" id="btn-launcher-new-app">
+            ✨ Nuevo Proyecto (Grill-Me)
+          </button>
+        </div>
+
+        <!-- Cuadrícula de proyectos locales -->
+        <div class="projects-hub-grid" id="launcher-projects-grid">
+          <!-- Inyectado dinámicamente con las tarjetas de proyectos -->
+        </div>
+
+        <!-- Sección de Proyectos en Git (Históricos) -->
+        <div style="margin-top: 14px; border-top: 1px solid var(--border-subtle); padding-top: 14px;">
+          <details>
+            <summary style="font-size: 0.85rem; font-weight: 600; color: #a5b4fc; cursor: pointer; user-select: none;">
+              🌿 Checkpoints Git del Proyecto Activo (<span id="launcher-git-count">0</span>)
+            </summary>
+            <div class="launcher-git-list" id="launcher-git-list" style="margin-top: 10px; max-height: 140px; overflow-y: auto;">
+              <!-- Inyectado dinámicamente -->
+            </div>
+          </details>
+        </div>
+
+        <!-- Barra inferior: Proyecto Actual Seleccionado -->
+        <div class="launcher-current-box" id="launcher-current-box" style="margin-top: 16px;">
+          <div class="launcher-current-info">
+            <span class="current-dot"></span>
+            <span><strong>Proyecto Activo:</strong> <span id="launcher-current-name">Cargando...</span></span>
+            <span class="badge-initialized" id="launcher-current-status">INITIALIZED</span>
+          </div>
+          <button class="btn btn-secondary-sm" id="btn-launcher-continue">
+            Continuar en este Proyecto ➔
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL 1: Advertencia de Inicio de Nuevo Proyecto -->
   <div class="modal-backdrop hidden" id="modal-new-app-confirm">
     <div class="modal-dialog">
       <div class="modal-header">
         <div class="modal-title-group">
-          <h3>⚠️ Comenzar un Nuevo Proyecto</h3>
-          <p class="modal-subtitle">Confirmación de limpieza y respaldo de seguridad.</p>
+          <h3>✨ Comenzar un Nuevo Proyecto Aislado</h3>
+          <p class="modal-subtitle">Aislamiento total en carpeta dedicada dentro de <code>projects/</code>.</p>
         </div>
         <button class="modal-close" id="btn-close-new-confirm">&times;</button>
       </div>
       <div class="modal-body">
         <p>Al iniciar un nuevo proyecto:</p>
         <ul style="margin: 12px 0 12px 20px; line-height: 1.6;">
-          <li>Se creará una <strong>copia de seguridad automática</strong> del proyecto actual en <code>exports/</code>.</li>
-          <li>Se limpiará el espacio de trabajo activo y los documentos anteriores para <strong>evitar mezclar requerimientos</strong>.</li>
-          <li>Se iniciará el <strong>Asistente por Rondas (Grill-Me)</strong> para definir la arquitectura del nuevo sistema.</li>
+          <li>Se creará una carpeta dedicada <code>projects/&lt;Nombre_Proyecto&gt;/</code> <strong>100% autocontenida</strong>.</li>
+          <li>Los archivos preexistentes del motor de SoftFactory <strong>no serán modificados en ningún momento</strong>.</li>
+          <li>Todos los artefactos (Discovery, PRD, System Design, QA) y el código fuente residirán exclusivamente en esa carpeta.</li>
+          <li>Podrás borrar o conservar la carpeta cuando trabajes con otro proyecto.</li>
         </ul>
-        <p>¿Deseas respaldar y continuar?</p>
+        <p>¿Deseas continuar al Asistente de Elicitación Grill-Me?</p>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="btn-cancel-new-confirm">Cancelar</button>
@@ -264,7 +335,7 @@
     <div class="modal-dialog modal-lg">
       <div class="modal-header">
         <div class="modal-title-group">
-          <h3>✨ Asistente de Elicitación Grill-Me (Fase 0)</h3>
+          <h3>✨ Asistente de Elicitación Grill-Me (Etapa 1)</h3>
           <p class="modal-subtitle">Define las decisiones arquitectónicas por rondas progresivas.</p>
         </div>
         <button class="modal-close" id="btn-close-grill">&times;</button>
@@ -281,9 +352,10 @@
 
         <!-- RONDA 1 -->
         <div class="wizard-pane active" id="wpane-1">
-          <div class="form-group">
-            <label for="grill-proj-name">Nombre Clave del Proyecto (slug):</label>
-            <input type="text" id="grill-proj-name" class="form-control" placeholder="Ej: gestion_pedidos" value="nueva_aplicacion">
+          <div class="form-group" id="group-grill-proj-name">
+            <label for="grill-proj-name" id="lbl-grill-proj-name">Nombre del Proyecto:</label>
+            <input type="text" id="grill-proj-name" class="form-control" placeholder="Ej: Reservas Taller" value="Reservas Taller">
+            <div id="grill-proj-hint" style="font-size: 0.76rem; color: #a5b4fc; margin-top: 4px;">📁 Proyecto aislado en <code>projects/</code>. SoftFactory no se modificará.</div>
           </div>
 
           <div class="form-group">
@@ -370,28 +442,123 @@
     </div>
   </div>
 
-  <!-- MODAL 3: Confirm Reset -->
+  <!-- MODAL 3: Reset o Eliminación del Proyecto Activo -->
   <div class="modal-backdrop hidden" id="modal-reset">
     <div class="modal-dialog">
       <div class="modal-header">
         <div class="modal-title-group">
-          <h3>⚠️ Reiniciar Ambiente de la Fábrica</h3>
-          <p class="modal-subtitle">Se limpiará el workspace y el shared_pool para comenzar un nuevo proyecto.</p>
+          <h3>🔄 Reiniciar o Eliminar Proyecto</h3>
+          <p class="modal-subtitle">Opera exclusivamente sobre el proyecto activo: <strong id="reset-modal-pname">app</strong></p>
         </div>
         <button class="modal-close" id="btn-close-reset">&times;</button>
       </div>
       <div class="modal-body">
-        <p>Esta acción:</p>
-        <ul style="margin: 12px 0 12px 20px; line-height: 1.6;">
-          <li>Creará un <strong>respaldo automático</strong> de la aplicación actual en <code>exports/</code>.</li>
-          <li>Limpiará <code>environment/workspace/</code> y <code>shared_pool/</code>.</li>
-          <li>Restablecerá <code>workflow_context.json</code> a su estado base inicial.</li>
-        </ul>
-        <p>¿Estás seguro de continuar?</p>
+        <p>Elige qué acción deseas realizar sobre la carpeta del proyecto activo:</p>
+        <div style="display: flex; flex-direction: column; gap: 12px; margin: 16px 0;">
+          <div style="background: rgba(15, 23, 42, 0.6); padding: 12px; border-radius: 8px; border: 1px solid var(--border-subtle);">
+            <strong style="color: #60a5fa;">Opción A: Limpiar y Reiniciar Proyecto</strong>
+            <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 4px;">Crea un backup en <code>exports/</code> y vacía los artefactos y workspace de este proyecto para volver a empezar.</p>
+            <button class="btn btn-secondary-sm" id="btn-confirm-reset" style="margin-top: 8px;">🔄 Respaldar y Reiniciar</button>
+          </div>
+          <div style="background: rgba(244, 63, 94, 0.08); padding: 12px; border-radius: 8px; border: 1px solid rgba(244, 63, 94, 0.25);">
+            <strong style="color: #fb7185;">Opción B: Eliminar Carpeta del Proyecto Completa</strong>
+            <p style="font-size: 0.8rem; color: var(--text-dim); margin-top: 4px;">Elimina por completo la carpeta <code>projects/&lt;nombre&gt;</code> del disco. SoftFactory permanece intacta.</p>
+            <button class="btn btn-danger" id="btn-delete-active-project" style="margin-top: 8px;">🗑️ Eliminar Proyecto del Disco</button>
+          </div>
+        </div>
+        <p style="font-size: 0.78rem; color: #94a3b8;">SoftFactory y los demás proyectos nunca serán afectados.</p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="btn-cancel-reset">Cancelar</button>
-        <button class="btn btn-danger" id="btn-confirm-reset">Sí, Respaldar y Reiniciar</button>
+        <button class="btn btn-secondary" id="btn-cancel-reset">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 4: Lazo de Mantenimiento / Nueva Solicitud RFC / Bugfix -->
+  <div class="modal-backdrop hidden" id="modal-maintenance">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>🛠️ Lazo de Mantenimiento y Nuevos Requerimientos</h3>
+          <p class="modal-subtitle">Modifica o corrige la aplicación activa preservando el código existente en Workspace.</p>
+        </div>
+        <button class="modal-close" id="btn-close-maintenance">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="maint-type">Tipo de Intervención:</label>
+          <select id="maint-type" class="form-control">
+            <option value="rfc" selected>💡 Nuevo Requerimiento / RFC Evolutivo (Ampliación de funcionalidad)</option>
+            <option value="bugfix">🐛 Corrección de Defecto / Bugfix (Ajuste de fallo o caso extremo)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="maint-title">Título del Cambio o Issue:</label>
+          <input type="text" id="maint-title" class="form-control" placeholder="Ej: Agregar exportación a formato CSV / Corregir error en cálculo de fechas">
+        </div>
+        <div class="form-group">
+          <label for="maint-desc">Descripción Detallada y Criterios Esperados:</label>
+          <textarea id="maint-desc" class="form-control" rows="4" placeholder="Describe qué debe modificarse, entradas/salidas y casos de prueba esperados..."></textarea>
+        </div>
+        <div class="note-box" style="margin-top: 10px; font-size: 0.82rem; color: #94a3b8; background: rgba(30, 41, 59, 0.5); padding: 10px; border-radius: 6px; border-left: 3px solid #6366f1;">
+          ℹ️ Esta acción no reinicia el proyecto. Conserva el código en <code>environment/workspace/</code> y genera <code>DELTA_REQUIREMENT.txt</code> para que el PM y el Arquitecto actualicen las especificaciones incrementales.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-maintenance">Cancelar</button>
+        <button class="btn btn-primary" id="btn-submit-maintenance">🚀 Activar Lazo de Mantenimiento</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 5: Compuerta Crítica de Autorización Humana para Modificación de Fuentes -->
+  <div class="modal-backdrop hidden" id="modal-code-approval">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>🚨 Compuerta de Seguridad: Autorización de Modificación de Fuentes</h3>
+          <p class="modal-subtitle">Revisa el alcance, impacto y archivos autorizados antes de escribir código en el Workspace.</p>
+        </div>
+        <button class="modal-close" id="btn-close-code-approval">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert-box-warning" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+          <div style="font-weight: 600; color: #fbbf24; margin-bottom: 4px;">🛡️ Human-in-the-Loop Obligatorio</div>
+          <p style="font-size: 0.82rem; color: #fef3c7; line-height: 1.5;">
+            Ningún archivo en <code>environment/workspace/</code> será modificado hasta que confirmes explícitamente tu aprobación. Si estás solicitando una corrección o nueva funcionalidad, verifica que los archivos correspondan estrictamente a lo solicitado.
+          </p>
+        </div>
+
+        <div id="code-approval-maint-context" class="hidden" style="margin-bottom: 16px; background: rgba(30, 41, 59, 0.7); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
+          <h4 style="font-size: 0.85rem; color: #a5b4fc; margin-bottom: 6px;">📝 Requerimiento Activo:</h4>
+          <pre id="code-approval-delta-text" style="font-size: 0.75rem; color: #cbd5e1; max-height: 120px; overflow-y: auto; white-space: pre-wrap; font-family: var(--font-mono);"></pre>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
+          <div>
+            <h4 style="font-size: 0.85rem; color: #34d399; margin-bottom: 6px;">✅ Archivos Autorizados (Touched Surface):</h4>
+            <ul id="code-approval-allowed-list" style="font-size: 0.78rem; font-family: var(--font-mono); color: #94a3b8; max-height: 140px; overflow-y: auto; list-style: none; padding-left: 0;">
+              <!-- Llenado dinámicamente -->
+            </ul>
+          </div>
+          <div>
+            <h4 style="font-size: 0.85rem; color: #f43f5e; margin-bottom: 6px;">⛔ Módulos Estrictamente Prohibidos:</h4>
+            <ul id="code-approval-forbidden-list" style="font-size: 0.78rem; font-family: var(--font-mono); color: #fca5a5; max-height: 140px; overflow-y: auto; list-style: none; padding-left: 0;">
+              <!-- Llenado dinámicamente -->
+            </ul>
+          </div>
+        </div>
+
+        <div id="code-approval-plan-box" style="background: rgba(15, 23, 42, 0.7); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
+          <h4 style="font-size: 0.85rem; color: #818cf8; margin-bottom: 6px;">📋 Plan de Cambios del Programador:</h4>
+          <div id="code-approval-plan-text" style="font-size: 0.78rem; color: #94a3b8; max-height: 100px; overflow-y: auto;">
+            El Programador implementará estrictamente los modelos, servicios, controladores y tests según las especificaciones aprobadas en SYSTEM_DESIGN.md.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-reject-code-approval">❌ Rechazar / Solicitar Ajustes</button>
+        <button class="btn btn-primary" id="btn-confirm-code-approval">✅ Aprobar y Autorizar Modificación de Fuentes</button>
       </div>
     </div>
   </div>

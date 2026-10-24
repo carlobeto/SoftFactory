@@ -5,3 +5,6 @@ __pycache__/
 .pytest_cache/
 *.tar.gz
 .venv/
+/projects/
+/exports/
+/environment/workspace/

@@ -45,6 +45,13 @@
                 "shared_pool/01_prd/*",
                 "shared_pool/04_qa_reports/*"
             ]
+        },
+        "human_approvals": {
+            "discovery_notes": false,
+            "prd": false,
+            "system_design": false,
+            "code_modification": false,
+            "qa_report": false
         }
     }
 }
