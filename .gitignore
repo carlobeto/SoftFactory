@@ -8,3 +8,6 @@ __pycache__/
 /projects/
 /exports/
 /environment/workspace/
+API.txt
+*.pem
+*.key
