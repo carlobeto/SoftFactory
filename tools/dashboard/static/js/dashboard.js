@@ -979,7 +979,63 @@ dom.btnAcceptNewConfirm.addEventListener('click', () => {
   openGrillWizard('new_app');
 });
 
-function openGrillWizard(mode = 'active_project') {
+function selectMatchingOption(selectElem, targetValue) {
+  if (!selectElem || !targetValue) return false;
+  const target = String(targetValue).trim().toLowerCase();
+  if (!target) return false;
+
+  // 1. Coincidencia exacta con valor o texto
+  for (let i = 0; i < selectElem.options.length; i++) {
+    const opt = selectElem.options[i];
+    const val = (opt.value || '').trim().toLowerCase();
+    const txt = (opt.text || '').trim().toLowerCase();
+    if (val === target || txt === target) {
+      selectElem.selectedIndex = i;
+      return true;
+    }
+  }
+
+  // 2. Coincidencia por contención parcial
+  for (let i = 0; i < selectElem.options.length; i++) {
+    const opt = selectElem.options[i];
+    const val = (opt.value || '').trim().toLowerCase();
+    const txt = (opt.text || '').trim().toLowerCase();
+    if (val && (val.includes(target) || target.includes(val))) {
+      selectElem.selectedIndex = i;
+      return true;
+    }
+    if (txt && (txt.includes(target) || target.includes(txt))) {
+      selectElem.selectedIndex = i;
+      return true;
+    }
+  }
+
+  // 3. Coincidencia semántica / tokens de palabras clave
+  const targetTokens = target.replace(/[^a-z0-9áéíóúñ]/gi, ' ').split(/\s+/).filter(w => w.length >= 3);
+  let bestIndex = -1;
+  let maxScore = 0;
+
+  for (let i = 0; i < selectElem.options.length; i++) {
+    const opt = selectElem.options[i];
+    const combined = `${opt.value} ${opt.text}`.toLowerCase();
+    let score = 0;
+    for (const t of targetTokens) {
+      if (combined.includes(t)) score++;
+    }
+    if (score > maxScore) {
+      maxScore = score;
+      bestIndex = i;
+    }
+  }
+
+  if (bestIndex !== -1 && maxScore > 0) {
+    selectElem.selectedIndex = bestIndex;
+    return true;
+  }
+  return false;
+}
+
+async function openGrillWizard(mode = 'active_project') {
   state.grillMode = mode;
   state.wizardStep = 1;
 
@@ -989,12 +1045,18 @@ function openGrillWizard(mode = 'active_project') {
   const modalTitle = document.querySelector('#modal-grill .modal-title-group h3');
   const modalSub = document.querySelector('#modal-grill .modal-title-group p');
   const promptInput = document.getElementById('grill-prompt');
+  const platformSelect = document.getElementById('grill-opt-platform');
+  const entitiesInput = document.getElementById('grill-opt-entities');
+  const authSelect = document.getElementById('grill-opt-auth');
+  const errorsSelect = document.getElementById('grill-opt-errors');
+  const persistenceSelect = document.getElementById('grill-opt-persistence');
+  const cachingSelect = document.getElementById('grill-opt-caching');
 
   const activeName = state.activeProject?.project_name || 'app';
 
   if (mode === 'active_project') {
     if (modalTitle) modalTitle.textContent = `✨ Elicitación Grill-Me (Etapa 1): ${activeName}`;
-    if (modalSub) modalSub.textContent = `Definiendo decisiones y contrato para el proyecto seleccionado '${activeName}'.`;
+    if (modalSub) modalSub.textContent = `Revisando o re-ejecutando decisiones para '${activeName}'.`;
     if (projLabel) projLabel.innerHTML = `<strong>Proyecto Seleccionado:</strong>`;
     if (projInput) {
       projInput.value = activeName;
@@ -1005,6 +1067,28 @@ function openGrillWizard(mode = 'active_project') {
     // Si el proyecto tiene requerimiento inicial guardado, pre-cargar si el campo está vacío
     if (!promptInput.value.trim() && state.activeProject?.context?.project_metadata?.seed_requirement) {
       promptInput.value = state.activeProject.context.project_metadata.seed_requirement;
+    }
+
+    // Pre-cargar valores existentes desde DISCOVERY_NOTES.md si ya existe en el proyecto activo
+    try {
+      const res = await fetch(`/api/artifacts/discovery_notes?project=${encodeURIComponent(activeName)}`);
+      const data = await res.json();
+      if (data && data.exists && data.parsed_answers) {
+        const a = data.parsed_answers;
+        if (a.prompt && promptInput) promptInput.value = a.prompt;
+        if (a.api_style && platformSelect) selectMatchingOption(platformSelect, a.api_style);
+        if (a.entities && entitiesInput) entitiesInput.value = a.entities;
+        if (a.auth_scheme && authSelect) selectMatchingOption(authSelect, a.auth_scheme);
+        if (a.error_format && errorsSelect) selectMatchingOption(errorsSelect, a.error_format);
+        if (a.persistence && persistenceSelect) selectMatchingOption(persistenceSelect, a.persistence);
+        if (a.caching && cachingSelect) selectMatchingOption(cachingSelect, a.caching);
+
+        if (projHint) {
+          projHint.innerHTML = `🔒 Proyecto activo <code>projects/${escapeHtml(activeName)}/</code>. Decisiones pre-cargadas desde <code>DISCOVERY_NOTES.md</code>.`;
+        }
+      }
+    } catch (err) {
+      console.warn("No se pudieron pre-cargar respuestas previas de DISCOVERY_NOTES.md:", err);
     }
   } else {
     // Modo: 'new_app' (disparado exclusivamente desde "Nueva App")
@@ -1017,7 +1101,13 @@ function openGrillWizard(mode = 'active_project') {
       projInput.placeholder = 'Ej: Inventario Taller';
     }
     if (projHint) projHint.innerHTML = `📁 Se creará la carpeta aislada <code>projects/&lt;nombre&gt;/</code> sin alterar archivos de SoftFactory.`;
-    promptInput.value = '';
+    if (promptInput) promptInput.value = '';
+    if (platformSelect) platformSelect.selectedIndex = 0;
+    if (entitiesInput) entitiesInput.value = 'Productos, Clientes, Facturas';
+    if (authSelect) authSelect.selectedIndex = 0;
+    if (errorsSelect) errorsSelect.selectedIndex = 0;
+    if (persistenceSelect) persistenceSelect.selectedIndex = 0;
+    if (cachingSelect) cachingSelect.selectedIndex = 0;
   }
 
   showWizardStep(1);

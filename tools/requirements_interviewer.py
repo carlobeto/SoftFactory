@@ -9,6 +9,7 @@ estructuradas antes de generar el PRD.
 import argparse
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -363,6 +364,77 @@ Las siguientes entidades componen el núcleo de datos del sistema:
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
+
+
+def parse_discovery_notes(content: str) -> dict[str, str]:
+    """Extrae las decisiones y respuestas estructuradas de un documento DISCOVERY_NOTES.md."""
+    parsed = {
+        "prompt": "",
+        "api_style": "",
+        "consumers": "",
+        "auth_scheme": "",
+        "error_format": "",
+        "persistence": "",
+        "caching": "",
+        "validation": "",
+        "deployment": "",
+        "entities": "",
+    }
+    if not content:
+        return parsed
+
+    for line in content.splitlines():
+        if "Requerimiento Semilla:" in line:
+            parsed["prompt"] = line.split("`")[1] if "`" in line else line.split(":", 1)[1].strip()
+        elif "| **Estilo Arquitectónico** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["api_style"] = parts[2].strip()
+        elif "| **Consumidores Clave** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["consumers"] = parts[2].strip()
+        elif "| **Seguridad & Auth** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["auth_scheme"] = parts[2].strip()
+        elif "| **Gestión de Errores** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["error_format"] = parts[2].strip()
+        elif "| **Persistencia** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["persistence"] = parts[2].strip()
+        elif "| **Caché & Rendimiento** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["caching"] = parts[2].strip()
+        elif "| **Validación de Datos** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["validation"] = parts[2].strip()
+        elif "| **Estrategia Despliegue** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["deployment"] = parts[2].strip()
+
+    ents = []
+    in_entities = False
+    for line in content.splitlines():
+        if "## 3. Modelo de Dominio" in line:
+            in_entities = True
+            continue
+        if in_entities:
+            if line.startswith("---") or line.startswith("## "):
+                break
+            m = re.match(r"^\s*-\s*\*\*([^*]+)\*\*", line)
+            if m:
+                ents.append(m.group(1).strip())
+    if ents:
+        parsed["entities"] = ", ".join(ents)
+
+    return parsed
 
 
 def main():

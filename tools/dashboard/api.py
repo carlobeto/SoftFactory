@@ -40,7 +40,11 @@ from tools.dashboard.agent_runners import (
     generate_system_design_artifact,
     run_qa_audit_and_tests,
 )
-from tools.requirements_interviewer import generate_discovery_notes, run_grill_interview
+from tools.requirements_interviewer import (
+    generate_discovery_notes,
+    parse_discovery_notes,
+    run_grill_interview,
+)
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -244,7 +248,25 @@ def get_active_artifact(artifact_key: str, project: Optional[str] = None):
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    return {"artifact_key": artifact_key, "project": paths["project_name"], "exists": True, "content": content}
+    resp = {"artifact_key": artifact_key, "project": paths["project_name"], "exists": True, "content": content}
+    if artifact_key == "discovery_notes":
+        try:
+            resp["parsed_answers"] = parse_discovery_notes(content)
+        except Exception:
+            resp["parsed_answers"] = None
+    return resp
+
+
+@app.get("/api/projects/{project_name:path}/discovery-answers")
+def get_project_discovery_answers(project_name: str):
+    """Retorna las respuestas estructuradas ya extraídas de DISCOVERY_NOTES.md para pre-cargar el asistente Grill-Me."""
+    paths = get_project_paths(project_name)
+    discovery_file = paths["01_prd"] / "DISCOVERY_NOTES.md"
+    if not discovery_file.exists():
+        return {"exists": False, "answers": None, "project": paths["project_name"]}
+    with open(discovery_file, "r", encoding="utf-8") as f:
+        content = f.read()
+    return {"exists": True, "answers": parse_discovery_notes(content), "project": paths["project_name"]}
 
 
 # --- Endpoints de Inspección de Git (Checkpoints, Commits y Tags del Proyecto) ---
