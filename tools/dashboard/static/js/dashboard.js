@@ -42,56 +42,120 @@ const ARTIFACT_NAMES = {
   change_plan: 'CHANGE_PLAN.md (Etapa 4: Plan)',
   patch: 'model.patch (Etapa 4: Código)',
   qa_report: 'QA_REPORT.md (Etapa 5: QA)',
+  local_runner: 'LOCAL_TESTING_SPEC.md (Etapa 6: Runner Local)',
+  deploy: 'DEPLOY_SPEC.md (Etapa 7: Deploy & Cloud)',
 };
 
 const STAGE_CONFIG = {
   discovery_notes: {
     tag: 'Etapa 1: Requirements Discovery & Grilling',
     desc: 'Protocolo de árbol de decisiones para desgranar y congelar requerimientos.',
+    skills: [
+      { name: 'grill-me', version: '1.1.0', scope: 'global', role: 'Árbol de Preguntas y Smart Defaults' },
+      { name: 'domain-modeling', version: '1.0.0', scope: 'global', role: 'Modelo de Recursos y Entidades' },
+      { name: 'api-design', version: '1.0.0', scope: 'global', role: 'Estándar de Endpoints y RFC 7807' },
+    ],
+    agent: 'Rita (Requirements Discovery)',
     btnText: '✨ Ejecutar Elicitación Grill-Me',
     action: () => openGrillWizard('active_project'),
   },
   delta_requirement: {
     tag: 'Lazo de Mantenimiento / Nueva Solicitud',
     desc: 'Semilla de modificación, issue o requerimiento evolutivo sobre el proyecto activo.',
+    skills: [],
     btnText: '🛠️ Formular Modificación o Corrección',
     action: () => openMaintenanceModal(),
   },
   prd: {
     tag: 'Etapa 2: Product Manager',
     desc: 'Traduce las decisiones de Discovery en objetivos, historias Gherkin y pool priorizado.',
+    skills: [
+      { name: 'domain-modeling', version: '1.0.0', scope: 'global', role: 'Historias de Usuario y Criterios Gherkin' },
+      { name: 'api-design', version: '1.0.0', scope: 'global', role: 'Especificación de Contratos y Alcance' },
+    ],
+    agent: 'Alice (Product Manager)',
     btnText: '📝 Generar / Regenerar PRD',
     action: () => triggerStageGeneration('/api/actions/generate/prd', 'PRD.md generado con éxito por el Product Manager.'),
   },
   system_design: {
     tag: 'Etapa 3: Arquitecto de Software',
     desc: 'Diseña la arquitectura técnica, diagramas de clases, secuencias y desglose de tareas.',
+    skills: [
+      { name: 'api-design', version: '1.0.0', scope: 'global', role: 'Firmas de Clases, Endpoints y DTOs' },
+      { name: 'domain-modeling', version: '1.0.0', scope: 'global', role: 'Mapeo de Modelos de Datos' },
+    ],
+    agent: 'Bob (Architect)',
     btnText: '📐 Generar / Regenerar Arquitectura & Tareas',
     action: () => triggerStageGeneration('/api/actions/generate/system_design', 'Arquitectura y TASKS.md generados con éxito.'),
   },
   tasks: {
     tag: 'Etapa 3: Tareas de Implementación',
     desc: 'Lista de módulos y unidades atómicas asignables al Programador.',
+    skills: [
+      { name: 'api-design', version: '1.0.0', scope: 'global', role: 'Desglose por archivo' },
+    ],
+    agent: 'Bob (Architect)',
     btnText: '📐 Actualizar TASKS.md',
     action: () => triggerStageGeneration('/api/actions/generate/system_design', 'TASKS.md actualizado con éxito.'),
   },
   change_plan: {
     tag: 'Etapa 4: Programador (Plan de Cambios)',
     desc: 'Congela la superficie autorizada de archivos antes de escribir código.',
-    btnText: '📝 Ver Plan de Cambios',
-    action: () => showToast('El plan de cambios se genera automáticamente al implementar el código.', 'info'),
+    skills: [
+      { name: 'api-design', version: '1.0.0', scope: 'global', role: 'Límites de superficie y dependencias' },
+    ],
+    agent: 'Alex (Engineer)',
+    btnText: 'Plan de Cambios & Código',
+    action: async () => {
+      if (!state.humanApprovals || !state.humanApprovals.code_modification) {
+        openCodeApprovalModal();
+        return;
+      }
+      await triggerStageGeneration('/api/actions/generate/code', 'Plan de cambios y código implementados con éxito.');
+      loadArtifactContent('change_plan');
+    },
   },
   patch: {
     tag: 'Etapa 4: Programador (Código & Parche)',
-    desc: 'Implementación completa del sistema en environment/workspace y generación de model.patch.',
-    btnText: '💻 Validar Código en Workspace',
-    action: () => showToast('Código inspeccionado. Procede con la auditoría de QA.', 'info'),
+    desc: 'Implementación completa del sistema en workspace y emisión de model.patch.',
+    skills: [
+      { name: 'api-design', version: '1.0.0', scope: 'global', role: 'Implementación según firmas' },
+    ],
+    agent: 'Alex (Engineer)',
+    btnText: 'Implementar Código en Workspace',
+    action: async () => {
+      if (!state.humanApprovals || !state.humanApprovals.code_modification) {
+        openCodeApprovalModal();
+        return;
+      }
+      await triggerStageGeneration('/api/actions/generate/code', 'Código fuente implementado con éxito por el Programador.');
+      loadArtifactContent('patch');
+    },
   },
   qa_report: {
     tag: 'Etapa 5: QA & Hostile Auditor',
     desc: 'Ejecuta análisis de deriva (Drift Check), linter y la suite de pruebas dinámicas.',
+    skills: [
+      { name: 'api-design', version: '1.0.0', scope: 'global', role: 'Auditoría de conformidad de API' },
+    ],
+    agent: 'Dana (QA & Hostile Auditor)',
     btnText: '🛡️ Ejecutar Auditoría Hostil y Tests',
     action: () => triggerStageGeneration('/api/actions/run_qa', 'Auditoría de QA y suite de pruebas ejecutadas.'),
+  },
+  local_runner: {
+    tag: 'Etapa 6: Entorno de Pruebas Local (PC de Desarrollo)',
+    desc: 'Genera el lanzador local (local_runner.py), seeds y el Sandbox Web Testbench para el navegador.',
+    skills: [],
+    agent: 'Runtime Specialist',
+    btnText: '⚡ Configurar / Generar Runner Local',
+    action: () => triggerStageGeneration('/api/actions/generate/local_runner', 'Entorno de pruebas local y local_runner.py generados con éxito.'),
+  },
+  deploy: {
+    tag: 'Etapa 7: Deploy & Cloud (DevOps)',
+    desc: 'Generación de manifiestos, contenedores y configuración para despliegue en la nube o ambiente productivo.',
+    skills: [],
+    btnText: '🚀 Configurar Deploy en la Nube',
+    action: () => showToast('La Etapa 7 de Deploy Cloud/DevOps estará disponible para la siguiente fase.', 'info'),
   },
 };
 
@@ -107,6 +171,7 @@ const dom = {
   toggleGit: document.getElementById('toggle-git'),
   artifactItems: document.querySelectorAll('.artifact-item'),
   stepCards: document.querySelectorAll('.step-card'),
+  stagesProgressText: document.getElementById('stages-progress-text'),
   bcFilename: document.getElementById('bc-filename'),
   bcOrigin: document.querySelector('.bc-origin'),
   markdownView: document.getElementById('markdown-view'),
@@ -179,6 +244,38 @@ const dom = {
   btnConfirmReset: document.getElementById('btn-confirm-reset'),
   btnDeleteActiveProject: document.getElementById('btn-delete-active-project'),
   btnExportApp: document.getElementById('btn-export-app'),
+  btnRunApp: document.getElementById('btn-run-app'),
+  btnStopApp: document.getElementById('btn-stop-app'),
+  // Modal Skills
+  btnOpenSkills: document.getElementById('btn-open-skills'),
+  modalSkills: document.getElementById('modal-skills'),
+  btnCloseSkills: document.getElementById('btn-close-skills'),
+  btnCloseSkillsFooter: document.getElementById('btn-close-skills-footer'),
+  skillsModalPname: document.getElementById('skills-modal-pname'),
+  btnToggleNewSkillForm: document.getElementById('btn-toggle-new-skill-form'),
+  newSkillFormBox: document.getElementById('new-skill-form-box'),
+  newSkillName: document.getElementById('new-skill-name'),
+  newSkillDesc: document.getElementById('new-skill-desc'),
+  newSkillBody: document.getElementById('new-skill-body'),
+  btnCancelNewSkill: document.getElementById('btn-cancel-new-skill'),
+  btnSubmitNewSkill: document.getElementById('btn-submit-new-skill'),
+  projectSkillsCount: document.getElementById('project-skills-count'),
+  projectSkillsList: document.getElementById('project-skills-list'),
+  globalSkillsCount: document.getElementById('global-skills-count'),
+  globalSkillsList: document.getElementById('global-skills-list'),
+  // Modal Lecciones Aprendidas (Evolución Factory)
+  btnOpenLesson: document.getElementById('btn-open-lesson'),
+  modalLesson: document.getElementById('modal-lesson'),
+  btnCloseLesson: document.getElementById('btn-close-lesson'),
+  btnCancelLesson: document.getElementById('btn-cancel-lesson'),
+  btnSubmitLesson: document.getElementById('btn-submit-lesson'),
+  lessonStage: document.getElementById('lesson-stage'),
+  lessonTarget: document.getElementById('lesson-target'),
+  lessonSymptom: document.getElementById('lesson-symptom'),
+  lessonCause: document.getElementById('lesson-cause'),
+  lessonProposal: document.getElementById('lesson-proposal'),
+  maintSkillRedirectBox: document.getElementById('maint-skill-redirect-box'),
+  maintOpenSkillsLink: document.getElementById('maint-open-skills-link'),
   toastContainer: document.getElementById('toast-container'),
 };
 
@@ -194,14 +291,19 @@ function showToast(message, type = 'success') {
 // --- Carga Inicial de Estado ---
 async function loadStatus() {
   try {
-    const res = await fetch('/api/status');
+    const projParam = state.activeProjectName ? `?project=${encodeURIComponent(state.activeProjectName)}` : '';
+    const res = await fetch(`/api/status${projParam}`);
     const data = await res.json();
-    state.activeProject = data.project_metadata;
+    state.activeProjectName = data.active_project;
+    state.activeProject = {
+      ...(data.project_metadata || {}),
+      project_name: data.active_project,
+    };
     state.artifactsStatus = data.artifacts_status || {};
     state.humanApprovals = data.human_approvals || {};
 
-    const projName = data.project_metadata.project_name || 'Sin Proyecto';
-    const status = data.project_metadata.status || 'INITIALIZED';
+    const projName = data.active_project || data.project_metadata?.project_name || 'Sin Proyecto';
+    const status = data.project_metadata?.status || 'INITIALIZED';
 
     dom.activeProjectName.textContent = projName;
     dom.activeProjectStatus.textContent = status;
@@ -224,11 +326,51 @@ async function loadStatus() {
       deltaItem.classList.toggle('hidden', !state.artifactsStatus.delta_requirement);
     }
 
+    // Actualizar estado del botón Probar App: Requiere obligatoriamente que la Etapa 6 esté Aprobada
+    if (dom.btnRunApp) {
+      const runningApp = data.running_app;
+      const isStage6Approved = Boolean(state.humanApprovals && state.humanApprovals.local_runner === true);
+
+      if (!isStage6Approved) {
+        dom.btnRunApp.textContent = '▶️ Probar App';
+        dom.btnRunApp.classList.remove('app-running');
+        dom.btnRunApp.title = 'Bloqueado: Requiere que la Etapa 6 (Entorno de Pruebas Local) esté formalmente Aprobada';
+        dom.btnRunApp.disabled = true;
+        if (dom.btnStopApp) dom.btnStopApp.classList.add('hidden');
+      } else if (runningApp && runningApp.running) {
+        dom.btnRunApp.textContent = `🟢 App Activa (:${runningApp.port})`;
+        dom.btnRunApp.classList.add('app-running');
+        dom.btnRunApp.title = `Abrir aplicación en ${runningApp.url} (clic para recargar en navegador)`;
+        dom.btnRunApp.disabled = false;
+        if (dom.btnStopApp) dom.btnStopApp.classList.remove('hidden');
+      } else {
+        dom.btnRunApp.textContent = '▶️ Probar App';
+        dom.btnRunApp.classList.remove('app-running');
+        dom.btnRunApp.title = 'Levantar servidor local de prueba y abrir en el navegador';
+        dom.btnRunApp.disabled = false;
+        if (dom.btnStopApp) dom.btnStopApp.classList.add('hidden');
+      }
+    }
+
     updateStepperBadges(state.artifactsStatus, state.humanApprovals);
     renderWorkspaceFiles(data.workspace_files);
     updateNextStepSuggestion();
     updateStageActionBar(state.selectedArtifact);
     await loadGitOverview();
+
+    // Consultar modo del motor para visibilidad de registro de lecciones
+    try {
+      const fRes = await fetch('/api/factory/info');
+      const fInfo = await fRes.json();
+      if (dom.btnOpenLesson) {
+        if (fInfo.mode === 'development') {
+          dom.btnOpenLesson.classList.remove('hidden');
+          dom.btnOpenLesson.title = `Registrar Lección Aprendida (Motor v${fInfo.engine_version} - Modo Desarrollo)`;
+        } else {
+          dom.btnOpenLesson.classList.add('hidden');
+        }
+      }
+    } catch (_) {}
   } catch (err) {
     console.error('Error cargando estado:', err);
   }
@@ -283,43 +425,73 @@ const STAGE_DEPENDENCIES = {
     prevArtifactKey: 'patch',
     prevName: 'Etapa 4 (Código)',
   },
+  local_runner: {
+    approvalKey: 'local_runner',
+    prevApprovalKey: 'qa_report',
+    prevArtifactKey: 'qa_report',
+    prevName: 'Etapa 5 (QA)',
+  },
+  deploy: {
+    approvalKey: 'deploy',
+    prevApprovalKey: 'local_runner',
+    prevArtifactKey: 'local_runner',
+    prevName: 'Etapa 6 (Test Local)',
+  },
 };
 
 function updateStepperBadges(artifacts, approvals = state.humanApprovals) {
   const steps = [
-    { cardId: 'step-discovery', id: 'badge-discovery', exists: artifacts.discovery_notes, approvalKey: 'discovery_notes', prevKey: null },
-    { cardId: 'step-prd', id: 'badge-prd', exists: artifacts.prd, approvalKey: 'prd', prevKey: 'discovery_notes' },
-    { cardId: 'step-system_design', id: 'badge-system_design', exists: artifacts.system_design, approvalKey: 'system_design', prevKey: 'prd' },
-    { cardId: 'step-patch', id: 'badge-patch', exists: artifacts.patch, approvalKey: 'code_modification', prevKey: 'system_design' },
-    { cardId: 'step-qa_report', id: 'badge-qa_report', exists: artifacts.qa_report, approvalKey: 'qa_report', prevKey: 'code_modification' },
+    { cardId: 'step-discovery', iconId: 'status-icon-discovery', exists: artifacts.discovery_notes, approvalKey: 'discovery_notes', prevKey: null },
+    { cardId: 'step-prd', iconId: 'status-icon-prd', exists: artifacts.prd, approvalKey: 'prd', prevKey: 'discovery_notes' },
+    { cardId: 'step-system_design', iconId: 'status-icon-system_design', exists: artifacts.system_design, approvalKey: 'system_design', prevKey: 'prd' },
+    { cardId: 'step-patch', iconId: 'status-icon-patch', exists: artifacts.patch, approvalKey: 'code_modification', prevKey: 'system_design' },
+    { cardId: 'step-qa_report', iconId: 'status-icon-qa_report', exists: artifacts.qa_report, approvalKey: 'qa_report', prevKey: 'code_modification' },
+    { cardId: 'step-local_runner', iconId: 'status-icon-local_runner', exists: artifacts.local_runner, approvalKey: 'local_runner', prevKey: 'qa_report' },
+    { cardId: 'step-deploy', iconId: 'status-icon-deploy', exists: Boolean(artifacts.deploy), approvalKey: 'deploy', prevKey: 'local_runner' },
   ];
 
+  let approvedCount = 0;
+
   steps.forEach(s => {
-    const el = document.getElementById(s.id);
+    const iconEl = document.getElementById(s.iconId);
     const card = document.getElementById(s.cardId);
     const isApproved = Boolean(approvals && approvals[s.approvalKey]);
     const isPrevApproved = !s.prevKey || Boolean(approvals && approvals[s.prevKey]);
+    const isLocked = !isPrevApproved && !s.exists;
 
-    if (card) {
-      card.classList.toggle('locked', !isPrevApproved && !s.exists);
+    if (isApproved) {
+      approvedCount++;
     }
 
-    if (el) {
-      if (!s.exists) {
-        // Estado 1: Pendiente - No existe
-        el.textContent = isPrevApproved ? 'Pendiente' : '🔒 Bloqueado';
-        el.className = 'step-status-badge badge-pending';
+    if (card) {
+      card.classList.toggle('locked', isLocked);
+      card.classList.toggle('step-approved', isApproved);
+    }
+
+    if (iconEl) {
+      if (isLocked) {
+        iconEl.textContent = '🔒';
+        iconEl.title = 'Bloqueado: Requiere aprobar la etapa previa';
+        iconEl.className = 'stage-status-icon icon-locked';
+      } else if (!s.exists) {
+        iconEl.textContent = '⚪';
+        iconEl.title = 'Pendiente: Aún no generado';
+        iconEl.className = 'stage-status-icon icon-pending';
       } else if (isApproved) {
-        // Estado 3: Aprobado
-        el.textContent = '✅ Aprobado';
-        el.className = 'step-status-badge badge-approved';
+        iconEl.textContent = '✅';
+        iconEl.title = 'Aprobado formalmente por el usuario';
+        iconEl.className = 'stage-status-icon icon-approved';
       } else {
-        // Estado 2: Por Aprobar - Existe pero no aprobado por el humano
-        el.textContent = '⏳ Por Aprobar';
-        el.className = 'step-status-badge badge-review';
+        iconEl.textContent = '⏳';
+        iconEl.title = 'Por Aprobar: Requiere revisión y aprobación';
+        iconEl.className = 'stage-status-icon icon-review';
       }
     }
   });
+
+  if (dom.stagesProgressText) {
+    dom.stagesProgressText.textContent = `${approvedCount} / 7`;
+  }
 
   updateArtifactTreeBadges();
 }
@@ -373,17 +545,29 @@ function getStageApprovalKey(artifactKey) {
   if (artifactKey === 'system_design' || artifactKey === 'tasks') return 'system_design';
   if (artifactKey === 'patch' || artifactKey === 'change_plan') return 'code_modification';
   if (artifactKey === 'qa_report') return 'qa_report';
+  if (artifactKey === 'local_runner') return 'local_runner';
+  if (artifactKey === 'deploy') return 'deploy';
   return null;
 }
 
 async function toggleStageApproval(stageKey, approve) {
+  if (!approve) {
+    const label = STAGE_CONFIG[stageKey]?.tag || stageKey;
+    const confirmed = confirm(
+      `¿Revocar la aprobación de '${label}'?\n\n` +
+      `ATENCIÓN: Por gobernanza de la Software Factory (AGENTS.md), todas las etapas posteriores deberán ser regeneradas y pasarán automáticamente al estado 'Pendiente'.`
+    );
+    if (!confirmed) return;
+  }
   try {
-    const endpoint = approve ? `/api/actions/approve/${stageKey}` : `/api/actions/revoke/${stageKey}`;
+    const projParam = state.activeProjectName ? `?project=${encodeURIComponent(state.activeProjectName)}` : '';
+    const endpoint = approve ? `/api/actions/approve/${stageKey}${projParam}` : `/api/actions/revoke/${stageKey}${projParam}`;
     const res = await fetch(endpoint, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Error al cambiar aprobación');
-    showToast(data.message, 'success');
+    showToast(data.message, approve ? 'success' : 'info');
     await loadStatus();
+    loadArtifactContent(state.selectedArtifact);
     updateStageActionBar(state.selectedArtifact);
   } catch (err) {
     showToast(err.message, 'error');
@@ -512,6 +696,15 @@ function updateNextStepSuggestion() {
     dom.btnNextStep.textContent = '🛡️ Revisar Impacto y Aprobar Código';
     dom.btnNextStep.onclick = () => openCodeApprovalModal();
     dom.nextStepBanner.classList.remove('hidden');
+  } else if (!s.patch) {
+    dom.nextStepTitle.textContent = 'Siguiente Paso: Etapa 4 (Programador)';
+    dom.nextStepDesc.textContent = 'Modificación de fuentes autorizada. Implementa los modelos, persistencia, servicios y tests en el workspace.';
+    dom.btnNextStep.textContent = '💻 Implementar Código en Workspace (Etapa 4)';
+    dom.btnNextStep.onclick = async () => {
+      await triggerStageGeneration('/api/actions/generate/code', 'Código fuente implementado con éxito por el Programador.');
+      loadArtifactContent('patch');
+    };
+    dom.nextStepBanner.classList.remove('hidden');
   } else if (!s.qa_report) {
     dom.nextStepTitle.textContent = 'Siguiente Paso: Etapa 5 (QA & Hostile Auditor)';
     dom.nextStepDesc.textContent = 'Código modificado bajo aprobación humana. Ejecuta la auditoría hostil y la suite de pruebas unitarias.';
@@ -527,11 +720,26 @@ function updateNextStepSuggestion() {
     dom.btnNextStep.textContent = '✅ Aprobar Entrega de QA (Etapa 5)';
     dom.btnNextStep.onclick = () => toggleStageApproval('qa_report', true);
     dom.nextStepBanner.classList.remove('hidden');
+  } else if (!s.local_runner) {
+    dom.nextStepTitle.textContent = 'Siguiente Paso: Etapa 6 (Runner Local - Testing PC)';
+    dom.nextStepDesc.textContent = 'Código y pruebas de QA aprobados. Genera el lanzador local (local_runner.py) y el Sandbox Testbench para probar la aplicación en tu PC.';
+    dom.btnNextStep.textContent = '⚡ Generar Runner Local de Pruebas (Etapa 6)';
+    dom.btnNextStep.onclick = async () => {
+      await triggerStageGeneration('/api/actions/generate/local_runner', 'Entorno de pruebas local generado con éxito.');
+      loadArtifactContent('local_runner');
+    };
+    dom.nextStepBanner.classList.remove('hidden');
+  } else if (!approvals.local_runner) {
+    dom.nextStepTitle.textContent = 'Compuerta Etapa 6: Aprobación del Entorno de Pruebas Local';
+    dom.nextStepDesc.textContent = 'El runner local y el testbench han sido generados. Revisa la especificación y aprueba formalmente el entorno local para habilitar la prueba en el navegador.';
+    dom.btnNextStep.textContent = '✅ Aprobar Entorno de Pruebas Local (Etapa 6)';
+    dom.btnNextStep.onclick = () => toggleStageApproval('local_runner', true);
+    dom.nextStepBanner.classList.remove('hidden');
   } else {
-    dom.nextStepTitle.textContent = '🎉 ¡Ciclo Aprobado y Completado por Humano!';
-    dom.nextStepDesc.textContent = 'Todas las etapas y la modificación de fuentes han sido aprobadas por ti. Puedes solicitar mantenimiento evolutivo, exportar o crear un nuevo proyecto.';
-    dom.btnNextStep.textContent = '📦 Exportar Aplicación Standalone';
-    dom.btnNextStep.onclick = () => dom.btnExportApp.click();
+    dom.nextStepTitle.textContent = '🎉 ¡Entorno Local Aprobado y Listo para Probar!';
+    dom.nextStepDesc.textContent = 'Todas las etapas (1 a 6) han sido validadas por el usuario humano. Puedes probar la aplicación en tu navegador en cualquier momento, solicitar mantenimiento o exportarla.';
+    dom.btnNextStep.textContent = '▶️ Probar Aplicación en el Navegador';
+    dom.btnNextStep.onclick = () => startAppTestServer();
     dom.nextStepBanner.classList.remove('hidden');
   }
 }
@@ -547,6 +755,23 @@ function updateStageActionBar(artifactKey) {
 
   dom.stageActionTag.textContent = cfg.tag;
   dom.stageActionDesc.textContent = cfg.desc;
+
+  const skillsContainer = document.getElementById('stage-skills-badges');
+  if (skillsContainer) {
+    if (cfg.skills && cfg.skills.length > 0) {
+      const badgesHtml = cfg.skills.map(s => 
+        `<span style="background: rgba(99, 102, 241, 0.15); border: 1px solid rgba(99, 102, 241, 0.35); color: #c7d2fe; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px;" title="${escapeHtml(s.role || '')}">
+          <span style="color: #818cf8;">⚡</span> <strong>${escapeHtml(s.name)}</strong> <span style="opacity: 0.7;">v${escapeHtml(s.version)}</span>
+        </span>`
+      ).join('');
+      const agentHtml = cfg.agent ? `<span style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); color: #a7f3d0; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px;">👤 ${escapeHtml(cfg.agent)}</span>` : '';
+      skillsContainer.innerHTML = `<span style="font-size: 0.72rem; color: #94a3b8; align-self: center;">Skills Activos:</span> ${badgesHtml} ${agentHtml}`;
+      skillsContainer.classList.remove('hidden');
+    } else {
+      skillsContainer.innerHTML = '';
+      skillsContainer.classList.add('hidden');
+    }
+  }
 
   if (state.mode === 'git') {
     dom.btnStageAction.textContent = '📥 Restaurar Esta Versión en Workspace';
@@ -669,7 +894,11 @@ async function triggerStageGeneration(endpoint, successMsg) {
   }
 
   try {
-    const res = await fetch(endpoint, { method: 'POST' });
+    const url = new URL(endpoint, window.location.origin);
+    if (state.activeProjectName && !url.searchParams.has('project')) {
+      url.searchParams.set('project', state.activeProjectName);
+    }
+    const res = await fetch(url.toString(), { method: 'POST' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Fallo al procesar etapa');
 
@@ -691,18 +920,20 @@ async function loadArtifactContent(artifactKey) {
   state.selectedArtifact = artifactKey;
   dom.bcFilename.textContent = ARTIFACT_NAMES[artifactKey] || artifactKey;
 
-  // Actualizar clase activa en sidebar y stepper
+  // Actualizar clase activa en árbol de archivos y menú lateral de etapas
+  const parentStageKey = (artifactKey === 'tasks') ? 'system_design' : (artifactKey === 'change_plan') ? 'patch' : artifactKey;
   dom.artifactItems.forEach(el => el.classList.toggle('active', el.dataset.artifact === artifactKey));
-  dom.stepCards.forEach(el => el.classList.toggle('active', el.dataset.stage === artifactKey));
+  dom.stepCards.forEach(el => el.classList.toggle('active', el.dataset.stage === parentStageKey));
 
   updateStageActionBar(artifactKey);
 
   try {
     let content = '';
     if (state.mode === 'workspace') {
-      const pName = state.activeProject?.project_name || 'app';
+      const pName = state.activeProjectName || state.activeProject?.project_name || 'app';
       dom.bcOrigin.textContent = `projects/${pName}`;
-      const res = await fetch(`/api/artifacts/${artifactKey}`);
+      const projParam = state.activeProjectName ? `?project=${encodeURIComponent(state.activeProjectName)}` : '';
+      const res = await fetch(`/api/artifacts/${artifactKey}${projParam}`);
       if (!res.ok) {
         throw new Error(`Artefacto '${artifactKey}' aún no ha sido generado en esta etapa.`);
       }
@@ -995,6 +1226,7 @@ async function selectProject(projectName) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Error al seleccionar proyecto');
+    state.activeProjectName = data.active_project || projectName;
     showToast(data.message, 'success');
     closeProjectLauncher();
     await loadStatus();
@@ -1067,6 +1299,24 @@ if (dom.btnOpenMaintenance) dom.btnOpenMaintenance.addEventListener('click', ope
 if (dom.btnCloseMaintenance) dom.btnCloseMaintenance.addEventListener('click', closeMaintenanceModal);
 if (dom.btnCancelMaintenance) dom.btnCancelMaintenance.addEventListener('click', closeMaintenanceModal);
 
+const maintTypeSelect = document.getElementById('maint-type');
+if (maintTypeSelect) {
+  maintTypeSelect.addEventListener('change', () => {
+    if (maintTypeSelect.value === 'skill') {
+      if (dom.maintSkillRedirectBox) dom.maintSkillRedirectBox.classList.remove('hidden');
+    } else {
+      if (dom.maintSkillRedirectBox) dom.maintSkillRedirectBox.classList.add('hidden');
+    }
+  });
+}
+if (dom.maintOpenSkillsLink) {
+  dom.maintOpenSkillsLink.addEventListener('click', (e) => {
+    e.preventDefault();
+    closeMaintenanceModal();
+    openSkillsModal();
+  });
+}
+
 if (dom.btnSubmitMaintenance) {
   dom.btnSubmitMaintenance.addEventListener('click', async () => {
     const request_type = document.getElementById('maint-type').value;
@@ -1074,28 +1324,50 @@ if (dom.btnSubmitMaintenance) {
     const description = document.getElementById('maint-desc').value.trim();
 
     if (!title || !description) {
-      alert('Por favor ingresa un título y una descripción detallada para la solicitud de mantenimiento.');
+      alert('Por favor ingresa un título y una descripción detallada.');
       return;
     }
 
     dom.btnSubmitMaintenance.disabled = true;
-    dom.btnSubmitMaintenance.textContent = 'Registrando Solicitud...';
+    dom.btnSubmitMaintenance.textContent = 'Procesando...';
 
     try {
-      const res = await fetch('/api/actions/maintenance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ request_type, title, description }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Error al registrar mantenimiento');
+      if (request_type === 'skill') {
+        // Guardar como propuesta de skill de proyecto
+        const skillName = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'custom-rule';
+        const res = await fetch('/api/skills/project/propose', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: skillName,
+            description: title,
+            applies_to_stages: ['prd', 'system_design', 'code_modification', 'qa_report'],
+            instructions_md: `## Regla del Proyecto: ${title}\n\n${description}\n`,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Error al proponer skill');
+        showToast(data.message, 'success');
+        closeMaintenanceModal();
+        document.getElementById('maint-title').value = '';
+        document.getElementById('maint-desc').value = '';
+        openSkillsModal();
+      } else {
+        const res = await fetch('/api/actions/maintenance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ request_type, title, description }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Error al registrar mantenimiento');
 
-      showToast(data.message, 'success');
-      closeMaintenanceModal();
-      document.getElementById('maint-title').value = '';
-      document.getElementById('maint-desc').value = '';
-      await loadStatus();
-      loadArtifactContent('delta_requirement');
+        showToast(data.message, 'success');
+        closeMaintenanceModal();
+        document.getElementById('maint-title').value = '';
+        document.getElementById('maint-desc').value = '';
+        await loadStatus();
+        loadArtifactContent('delta_requirement');
+      }
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -1104,6 +1376,282 @@ if (dom.btnSubmitMaintenance) {
     }
   });
 }
+
+// --- GESTIÓN DE SKILLS Y REGLAS DE DISEÑO ---
+function openSkillsModal() {
+  if (dom.modalSkills) {
+    dom.modalSkills.classList.remove('hidden');
+    const pname = state.activeProject?.project_name || 'Sin Proyecto';
+    if (dom.skillsModalPname) dom.skillsModalPname.textContent = pname;
+    loadSkills();
+  }
+}
+
+function closeSkillsModal() {
+  if (dom.modalSkills) {
+    dom.modalSkills.classList.add('hidden');
+    if (dom.newSkillFormBox) dom.newSkillFormBox.classList.add('hidden');
+  }
+}
+
+async function loadSkills() {
+  try {
+    const res = await fetch('/api/skills');
+    const data = await res.json();
+    renderSkills(data.global_skills || [], data.project_skills || []);
+  } catch (err) {
+    showToast('Error al cargar skills: ' + err.message, 'error');
+  }
+}
+
+function renderSkills(globals, projects) {
+  if (dom.globalSkillsCount) dom.globalSkillsCount.textContent = globals.length;
+  if (dom.projectSkillsCount) dom.projectSkillsCount.textContent = projects.length;
+
+  // Renderizar Globales
+  if (dom.globalSkillsList) {
+    if (!globals.length) {
+      dom.globalSkillsList.innerHTML = '<div style="font-size: 0.8rem; color: #64748b; font-style: italic;">No hay skills globales cargados.</div>';
+    } else {
+      dom.globalSkillsList.innerHTML = globals.map(s => `
+        <div style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 4px;">
+            <div style="font-weight: 600; color: #34d399; font-size: 0.88rem;">🌐 ${escapeHtml(s.name)} <span style="font-size: 0.72rem; color: #94a3b8; font-weight: normal;">v${escapeHtml(s.version || '1.0.0')}</span></div>
+            <span class="badge-stage" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.68rem; padding: 2px 8px;">GLOBAL</span>
+          </div>
+          <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 6px;">${escapeHtml(s.description)}</p>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            ${(s.applies_to_stages || []).map(st => `<span style="font-size: 0.68rem; background: rgba(51, 65, 85, 0.6); color: #94a3b8; padding: 1px 6px; border-radius: 4px;">${escapeHtml(st)}</span>`).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+  }
+
+  // Renderizar Proyecto
+  if (dom.projectSkillsList) {
+    if (!projects.length) {
+      dom.projectSkillsList.innerHTML = '<div style="font-size: 0.8rem; color: #64748b; font-style: italic;">No hay skills exclusivos configurados en este proyecto. Puedes proponer uno con el botón de arriba.</div>';
+    } else {
+      dom.projectSkillsList.innerHTML = projects.map(s => {
+        const isApproved = s.status === 'approved';
+        const isRevoked = s.status === 'revoked';
+        const statusBadge = isApproved
+          ? '<span class="badge-stage" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.7rem;">✅ Aprobado (Activo)</span>'
+          : (isRevoked
+            ? '<span class="badge-stage" style="background: rgba(239, 68, 68, 0.2); color: #f87171; font-size: 0.7rem;">⏸️ Revocado</span>'
+            : '<span class="badge-stage" style="background: rgba(245, 158, 11, 0.2); color: #fbbf24; font-size: 0.7rem;">⏳ Propuesto (Inactivo)</span>');
+
+        let actionButtons = '';
+        if (isApproved) {
+          actionButtons = `
+            <button class="btn btn-secondary btn-sm" onclick="handleRevokeSkill('${escapeHtml(s.name)}')" title="Revoca la restricción e invalida etapas afectadas">⏸️ Revocar</button>
+            <button class="btn btn-secondary btn-sm" onclick="handlePromoteSkill('${escapeHtml(s.name)}')" title="Proponer para que forme parte del motor global de la Software Factory">⬆️ Proponer a Global</button>
+          `;
+        } else if (isRevoked) {
+          actionButtons = `
+            <button class="btn btn-primary btn-sm" onclick="handleApproveSkill('${escapeHtml(s.name)}')" title="Re-activa el skill e invalida etapas posteriores">🔄 Re-aprobar</button>
+            <button class="btn btn-danger-ghost btn-sm" onclick="handleDeleteSkill('${escapeHtml(s.name)}')">🗑️</button>
+          `;
+        } else {
+          actionButtons = `
+            <button class="btn btn-primary btn-sm" onclick="handleApproveSkill('${escapeHtml(s.name)}')" title="Aprueba el skill e invalida en cascada las etapas afectadas para regenerarlas">✅ Aprobar (Invalida Etapas)</button>
+            <button class="btn btn-danger-ghost btn-sm" onclick="handleDeleteSkill('${escapeHtml(s.name)}')">🗑️</button>
+          `;
+        }
+
+        return `
+          <div style="background: rgba(15, 23, 42, 0.7); border: 1px solid ${isApproved ? '#38bdf8' : 'var(--border-subtle)'}; border-radius: 8px; padding: 12px;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+              <div>
+                <strong style="color: #67e8f9; font-size: 0.88rem;">📁 ${escapeHtml(s.name)}</strong>
+                <span style="font-size: 0.72rem; color: #94a3b8; margin-left: 6px;">v${escapeHtml(s.version || '0.1.0')}</span>
+              </div>
+              <div>${statusBadge}</div>
+            </div>
+            <p style="font-size: 0.78rem; color: #cbd5e1; margin-bottom: 8px;">${escapeHtml(s.description)}</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+                ${(s.applies_to_stages || []).map(st => `<span style="font-size: 0.68rem; background: rgba(56, 189, 248, 0.15); color: #7dd3fc; padding: 1px 6px; border-radius: 4px;">${escapeHtml(st)}</span>`).join('')}
+              </div>
+              <div style="display: flex; gap: 6px;">
+                ${actionButtons}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  }
+}
+
+// Handlers globales para skills
+window.handleApproveSkill = async function(name) {
+  if (!confirm(`¿Aprobar el skill '${name}'?\n\nATENCIÓN: Por gobernanza de la Software Factory, todas las etapas afectadas y sus posteriores pasarán a estado 'Pendiente' (sus artefactos se archivarán) para ser regeneradas aplicando estas nuevas restricciones.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/skills/project/${encodeURIComponent(name)}/approve`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al aprobar skill');
+    showToast(`Skill '${name}' aprobado. Etapas a regenerar: ${data.invalidated_stages.join(', ')}`, 'success');
+    await loadStatus();
+    await loadSkills();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+window.handleRevokeSkill = async function(name) {
+  if (!confirm(`¿Revocar el skill '${name}'?\n\nLas etapas afectadas pasarán a estado 'Pendiente' para regenerarse sin este skill.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/skills/project/${encodeURIComponent(name)}/revoke`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al revocar skill');
+    showToast(`Skill '${name}' revocado. Etapas a regenerar: ${data.invalidated_stages.join(', ')}`, 'info');
+    await loadStatus();
+    await loadSkills();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+window.handleDeleteSkill = async function(name) {
+  if (!confirm(`¿Eliminar definitivamente el skill de proyecto '${name}'?`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/skills/project/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al eliminar skill');
+    showToast(data.message, 'success');
+    await loadSkills();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+window.handlePromoteSkill = async function(name) {
+  if (!confirm(`¿Proponer la promoción del skill '${name}' a la Software Factory global?\n\nQuedará registrada una propuesta en factory/skill_proposals/ para evaluación del usuario/administrador.`)) {
+    return;
+  }
+  try {
+    const res = await fetch(`/api/skills/project/${encodeURIComponent(name)}/promote`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al proponer promoción');
+    showToast(`Propuesta de promoción registrada en ${data.file}`, 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+};
+
+if (dom.btnOpenSkills) dom.btnOpenSkills.addEventListener('click', openSkillsModal);
+if (dom.btnCloseSkills) dom.btnCloseSkills.addEventListener('click', closeSkillsModal);
+if (dom.btnCloseSkillsFooter) dom.btnCloseSkillsFooter.addEventListener('click', closeSkillsModal);
+
+if (dom.btnToggleNewSkillForm) {
+  dom.btnToggleNewSkillForm.addEventListener('click', () => {
+    if (dom.newSkillFormBox) dom.newSkillFormBox.classList.toggle('hidden');
+  });
+}
+if (dom.btnCancelNewSkill) {
+  dom.btnCancelNewSkill.addEventListener('click', () => {
+    if (dom.newSkillFormBox) dom.newSkillFormBox.classList.add('hidden');
+  });
+}
+if (dom.btnSubmitNewSkill) {
+  dom.btnSubmitNewSkill.addEventListener('click', async () => {
+    const name = dom.newSkillName.value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const description = dom.newSkillDesc.value.trim();
+    const instructions_md = dom.newSkillBody.value.trim();
+    const checkedStages = Array.from(document.querySelectorAll('input[name="skill-stage"]:checked')).map(cb => cb.value);
+
+    if (!name || !description || !instructions_md) {
+      alert('Por favor completa el nombre, descripción e instrucciones del skill.');
+      return;
+    }
+    if (!checkedStages.length) {
+      alert('Selecciona al menos una etapa a la que aplicará el skill.');
+      return;
+    }
+
+    dom.btnSubmitNewSkill.disabled = true;
+    try {
+      const res = await fetch('/api/skills/project/propose', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          description,
+          applies_to_stages: checkedStages,
+          instructions_md,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al proponer skill');
+      showToast(data.message, 'success');
+      dom.newSkillName.value = '';
+      dom.newSkillDesc.value = '';
+      dom.newSkillBody.value = '';
+      if (dom.newSkillFormBox) dom.newSkillFormBox.classList.add('hidden');
+      await loadSkills();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      dom.btnSubmitNewSkill.disabled = false;
+    }
+  });
+}
+
+// --- MODAL DE LECCIONES DEL MOTOR (EVOLUCIÓN FACTORY) ---
+function openLessonModal() {
+  if (dom.modalLesson) dom.modalLesson.classList.remove('hidden');
+}
+function closeLessonModal() {
+  if (dom.modalLesson) dom.modalLesson.classList.add('hidden');
+}
+
+if (dom.btnOpenLesson) dom.btnOpenLesson.addEventListener('click', openLessonModal);
+if (dom.btnCloseLesson) dom.btnCloseLesson.addEventListener('click', closeLessonModal);
+if (dom.btnCancelLesson) dom.btnCancelLesson.addEventListener('click', closeLessonModal);
+
+if (dom.btnSubmitLesson) {
+  dom.btnSubmitLesson.addEventListener('click', async () => {
+    const stage = dom.lessonStage.value;
+    const target = dom.lessonTarget.value;
+    const symptom = dom.lessonSymptom.value.trim();
+    const root_cause = dom.lessonCause.value.trim();
+    const proposal = dom.lessonProposal.value.trim();
+
+    if (!symptom) {
+      alert('Por favor describe el síntoma o fallo observado.');
+      return;
+    }
+
+    dom.btnSubmitLesson.disabled = true;
+    try {
+      const res = await fetch('/api/factory/lessons', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stage, target, symptom, root_cause, proposal }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Error al registrar lección');
+      showToast('Lección registrada exitosamente en FACTORY_LESSONS.md', 'success');
+      dom.lessonSymptom.value = '';
+      dom.lessonCause.value = '';
+      dom.lessonProposal.value = '';
+      closeLessonModal();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      dom.btnSubmitLesson.disabled = false;
+    }
+  });
+}
+
 
 // --- CONTROLES DE LA COMPUERTA DE APROBACIÓN DE CÓDIGO ---
 if (dom.btnCloseCodeApproval) dom.btnCloseCodeApproval.addEventListener('click', closeCodeApprovalModal);
@@ -1115,8 +1663,19 @@ if (dom.btnRejectCodeApproval) {
 }
 if (dom.btnConfirmCodeApproval) {
   dom.btnConfirmCodeApproval.addEventListener('click', async () => {
-    await toggleStageApproval('code_modification', true);
-    closeCodeApprovalModal();
+    dom.btnConfirmCodeApproval.disabled = true;
+    dom.btnConfirmCodeApproval.textContent = 'Implementando Código...';
+    try {
+      await toggleStageApproval('code_modification', true);
+      await triggerStageGeneration('/api/actions/generate/code', 'Código fuente implementado con éxito en el workspace.');
+      closeCodeApprovalModal();
+      loadArtifactContent('patch');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      dom.btnConfirmCodeApproval.disabled = false;
+      dom.btnConfirmCodeApproval.textContent = '✅ Aprobar y Autorizar Modificación de Fuentes';
+    }
   });
 }
 
@@ -1191,6 +1750,34 @@ function selectMatchingOption(selectElem, targetValue) {
   return false;
 }
 
+function adaptWizardSmartDefaults(text) {
+  const low = (text || '').toLowerCase();
+  const platformSelect = document.getElementById('grill-opt-platform');
+  const uiLayoutSelect = document.getElementById('grill-opt-ui-layout');
+  const entitiesInput = document.getElementById('grill-opt-entities');
+
+  const isWeather = low.includes('clima') || low.includes('tiempo') || low.includes('meteorol') || low.includes('weather') || low.includes('pronostico') || low.includes('pronóstico');
+  const wantsScreen = low.includes('pantalla') || low.includes('interfaz') || low.includes('frontend') || low.includes('ui') || low.includes('vista') || low.includes('dashboard') || low.includes('web');
+
+  if (isWeather) {
+    if (platformSelect) selectMatchingOption(platformSelect, 'web_spa');
+    if (uiLayoutSelect) selectMatchingOption(uiLayoutSelect, 'weather_dashboard');
+    if (entitiesInput && (entitiesInput.value === 'Productos, Clientes, Facturas' || entitiesInput.dataset.autoFilled === 'true' || !entitiesInput.value.trim())) {
+      entitiesInput.value = 'Ciudades, Pronósticos, ClimaActual';
+      entitiesInput.dataset.autoFilled = 'true';
+    }
+  } else if (wantsScreen) {
+    if (platformSelect && platformSelect.value === 'web_rest') selectMatchingOption(platformSelect, 'web_spa');
+    if (uiLayoutSelect && uiLayoutSelect.value === 'none_headless') {
+      selectMatchingOption(uiLayoutSelect, 'interactive_dashboard');
+    }
+    if (entitiesInput && (entitiesInput.value === 'Productos, Clientes, Facturas' || entitiesInput.dataset.autoFilled === 'true')) {
+      entitiesInput.value = 'Vistas, Componentes, Métricas';
+      entitiesInput.dataset.autoFilled = 'true';
+    }
+  }
+}
+
 async function openGrillWizard(mode = 'active_project') {
   state.grillMode = mode;
   state.wizardStep = 1;
@@ -1202,13 +1789,22 @@ async function openGrillWizard(mode = 'active_project') {
   const modalSub = document.querySelector('#modal-grill .modal-title-group p');
   const promptInput = document.getElementById('grill-prompt');
   const platformSelect = document.getElementById('grill-opt-platform');
+  const uiLayoutSelect = document.getElementById('grill-opt-ui-layout');
   const entitiesInput = document.getElementById('grill-opt-entities');
   const authSelect = document.getElementById('grill-opt-auth');
   const errorsSelect = document.getElementById('grill-opt-errors');
   const persistenceSelect = document.getElementById('grill-opt-persistence');
   const cachingSelect = document.getElementById('grill-opt-caching');
 
-  const activeName = state.activeProject?.project_name || 'app';
+  // Reactividad en vivo al escribir en el prompt inicial
+  if (promptInput) {
+    promptInput.oninput = () => adaptWizardSmartDefaults(promptInput.value);
+  }
+  if (entitiesInput) {
+    entitiesInput.oninput = () => { entitiesInput.dataset.autoFilled = 'false'; };
+  }
+
+  const activeName = state.activeProjectName || state.activeProject?.project_name || 'app';
 
   if (mode === 'active_project') {
     if (modalTitle) modalTitle.textContent = `✨ Elicitación Grill-Me (Etapa 1): ${activeName}`;
@@ -1233,6 +1829,7 @@ async function openGrillWizard(mode = 'active_project') {
         const a = data.parsed_answers;
         if (a.prompt && promptInput) promptInput.value = a.prompt;
         if (a.api_style && platformSelect) selectMatchingOption(platformSelect, a.api_style);
+        if (a.ui_layout && uiLayoutSelect) selectMatchingOption(uiLayoutSelect, a.ui_layout);
         if (a.entities && entitiesInput) entitiesInput.value = a.entities;
         if (a.auth_scheme && authSelect) selectMatchingOption(authSelect, a.auth_scheme);
         if (a.error_format && errorsSelect) selectMatchingOption(errorsSelect, a.error_format);
@@ -1259,11 +1856,41 @@ async function openGrillWizard(mode = 'active_project') {
     if (projHint) projHint.innerHTML = `📁 Se creará la carpeta aislada <code>projects/&lt;nombre&gt;/</code> sin alterar archivos de SoftFactory.`;
     if (promptInput) promptInput.value = '';
     if (platformSelect) platformSelect.selectedIndex = 0;
-    if (entitiesInput) entitiesInput.value = 'Productos, Clientes, Facturas';
+    if (uiLayoutSelect) uiLayoutSelect.selectedIndex = 1;
+    if (entitiesInput) {
+      entitiesInput.value = 'Productos, Clientes, Facturas';
+      entitiesInput.dataset.autoFilled = 'true';
+    }
     if (authSelect) authSelect.selectedIndex = 0;
     if (errorsSelect) errorsSelect.selectedIndex = 0;
     if (persistenceSelect) persistenceSelect.selectedIndex = 0;
     if (cachingSelect) cachingSelect.selectedIndex = 0;
+  }
+
+  // Ejecutar adaptación reactiva inicial por si ya había texto
+  if (promptInput && promptInput.value.trim()) {
+    adaptWizardSmartDefaults(promptInput.value);
+  }
+
+  // Cargar skills activos y verificar árbol de preguntas
+  try {
+    const qRes = await fetch(`/api/grill/questions?project=${encodeURIComponent(activeName)}`);
+    const qData = await qRes.json();
+    if (qData && qData.skills) {
+      const banner = document.getElementById('grill-skills-banner');
+      if (banner) {
+        const skillsTags = qData.skills.map(s => `<code style="background: rgba(0,0,0,0.35); padding: 2px 7px; border-radius: 4px; color: #c7d2fe;">${escapeHtml(s.name)} v${escapeHtml(s.version)} (${escapeHtml(s.scope)})</code>`).join(' ');
+        banner.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 1.15rem;">⚡</span>
+            <span><strong>Skills Activos:</strong> ${skillsTags}</span>
+          </div>
+          <span style="color: #cbd5e1; font-size: 0.78rem; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px;">👤 Agente: <strong>Rita (Discovery)</strong></span>
+        `;
+      }
+    }
+  } catch (e) {
+    console.warn("No se pudieron cargar skills de grill:", e);
   }
 
   showWizardStep(1);
@@ -1308,12 +1935,16 @@ dom.btnWizardNext.addEventListener('click', () => {
       alert('Ingresa una frase inicial para el requerimiento.');
       return;
     }
+    // Asegurar que las recomendaciones inteligentes se sincronicen antes de pasar al paso 2
+    adaptWizardSmartDefaults(prompt);
   }
   if (state.wizardStep < 4) showWizardStep(state.wizardStep + 1);
 });
 
 function buildWizardSummary() {
   const platform = document.getElementById('grill-opt-platform').options[document.getElementById('grill-opt-platform').selectedIndex].text;
+  const uiLayoutEl = document.getElementById('grill-opt-ui-layout');
+  const uiLayout = uiLayoutEl ? uiLayoutEl.options[uiLayoutEl.selectedIndex].text : 'Dashboard Web Interactivo';
   const entities = document.getElementById('grill-opt-entities').value;
   const auth = document.getElementById('grill-opt-auth').value;
   const errors = document.getElementById('grill-opt-errors').value;
@@ -1322,14 +1953,23 @@ function buildWizardSummary() {
   const isNew = (state.grillMode === 'new_app');
   const projName = isNew 
     ? (document.getElementById('grill-proj-name').value.trim() || 'nueva_app')
-    : (state.activeProject?.project_name || 'app');
+    : (state.activeProjectName || state.activeProject?.project_name || 'app');
   const prompt = document.getElementById('grill-prompt').value.trim();
 
   dom.grillSummaryContent.innerHTML = `
     <div><strong>Modo:</strong> <span class="badge-${isNew ? 'initialized' : 'active-tag'}">${isNew ? 'Nuevo Proyecto' : 'Proyecto Activo'}</span></div>
     <div><strong>Proyecto:</strong> <code>projects/${escapeHtml(projName)}/</code></div>
     <div><strong>Requerimiento:</strong> "${escapeHtml(prompt)}"</div>
+    <div style="margin-top: 8px; margin-bottom: 8px; padding: 8px 12px; background: rgba(99, 102, 241, 0.12); border-left: 3px solid #6366f1; border-radius: 4px;">
+      <strong style="color: #a5b4fc; font-size: 0.82rem;">⚡ Skills y Gobernanza Aplicada (AGENTS.md §5):</strong>
+      <div style="font-size: 0.78rem; color: #cbd5e1; margin-top: 4px; line-height: 1.5;">
+        • <strong style="color: #c7d2fe;">grill-me v1.1.0</strong>: Árbol de decisiones y recomendaciones inteligentes (Smart Defaults)<br>
+        • <strong style="color: #c7d2fe;">domain-modeling v1.0.0</strong>: Modelo de dominio y entidades clave<br>
+        • <strong style="color: #c7d2fe;">api-design v1.0.0</strong>: Borrador OpenAPI y estándar RFC 7807 Problem Details
+      </div>
+    </div>
     <div><strong>Plataforma / Interfaz:</strong> ${escapeHtml(platform)}</div>
+    <div><strong>Pantalla Inicial & UI:</strong> ${escapeHtml(uiLayout)}</div>
     <div><strong>Entidades:</strong> ${escapeHtml(entities)}</div>
     <div><strong>Autenticación:</strong> ${escapeHtml(auth)}</div>
     <div><strong>Persistencia:</strong> ${escapeHtml(persistence)}</div>
@@ -1350,17 +1990,23 @@ dom.btnWizardSubmit.addEventListener('click', async () => {
       return;
     }
   } else {
-    projName = state.activeProject?.project_name;
+    projName = state.activeProjectName || state.activeProject?.project_name;
     if (!projName) {
       alert('No hay un proyecto activo seleccionado.');
       return;
     }
   }
 
+  const uiLayoutEl = document.getElementById('grill-opt-ui-layout');
+  const uiLayoutVal = uiLayoutEl ? uiLayoutEl.options[uiLayoutEl.selectedIndex].text : "Dashboard Web Interactivo";
+  const isWeatherPrompt = (prompt.toLowerCase().includes('clima') || prompt.toLowerCase().includes('tiempo') || prompt.toLowerCase().includes('weather'));
+
   const answers = {
     api_style: document.getElementById('grill-opt-platform').options[document.getElementById('grill-opt-platform').selectedIndex].text,
+    ui_layout: uiLayoutVal,
+    ui_theme: isWeatherPrompt ? "Dark Mode Meteorológico Moderno con gradientes" : "Modern Dark Mode",
     entities: document.getElementById('grill-opt-entities').value,
-    consumers: "Clientes y usuarios de la plataforma seleccionada",
+    consumers: "Usuarios en navegador web (Pantalla Inicial SPA) y clientes móviles",
     auth_scheme: document.getElementById('grill-opt-auth').value,
     error_format: document.getElementById('grill-opt-errors').value,
     persistence: document.getElementById('grill-opt-persistence').value,
@@ -1403,6 +2049,62 @@ dom.btnWizardSubmit.addEventListener('click', async () => {
     dom.btnWizardSubmit.textContent = '🚀 Congelar Contrato y Generar Discovery';
   }
 });
+
+// --- Ejecución y Prueba en Vivo de la Aplicación en Navegador ---
+async function startAppTestServer() {
+  if (!dom.btnRunApp) return;
+  const isStage6Approved = Boolean(state.humanApprovals && state.humanApprovals.local_runner === true);
+  if (!isStage6Approved) {
+    showToast('Bloqueado: La Etapa 6 (Entorno de Pruebas Local) debe estar formalmente Aprobada antes de probar la aplicación.', 'error');
+    dom.btnRunApp.disabled = true;
+    return;
+  }
+
+  dom.btnRunApp.disabled = true;
+  const prevText = dom.btnRunApp.textContent;
+  dom.btnRunApp.textContent = '⏳ Iniciando...';
+
+  try {
+    const projParam = state.activeProjectName ? `?project=${encodeURIComponent(state.activeProjectName)}` : '';
+    const res = await fetch(`/api/actions/app/start${projParam}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Error al iniciar la aplicación');
+
+    showToast(data.message, 'success');
+    if (data.url) {
+      window.open(data.url, '_blank');
+    }
+    await loadStatus();
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    if (dom.btnRunApp) {
+      const stillApproved = Boolean(state.humanApprovals && state.humanApprovals.local_runner === true);
+      dom.btnRunApp.disabled = !stillApproved;
+      if (!stillApproved) dom.btnRunApp.textContent = prevText;
+    }
+  }
+}
+
+async function stopAppTestServer() {
+  if (!dom.btnStopApp) return;
+  try {
+    const projParam = state.activeProjectName ? `?project=${encodeURIComponent(state.activeProjectName)}` : '';
+    const res = await fetch(`/api/actions/app/stop${projParam}`, { method: 'POST' });
+    const data = await res.json();
+    showToast(data.message, 'info');
+    await loadStatus();
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+if (dom.btnRunApp) {
+  dom.btnRunApp.addEventListener('click', startAppTestServer);
+}
+if (dom.btnStopApp) {
+  dom.btnStopApp.addEventListener('click', stopAppTestServer);
+}
 
 // --- Exportar y Resetear Fábrica ---
 dom.btnExportApp.addEventListener('click', async () => {
@@ -1458,7 +2160,18 @@ dom.artifactItems.forEach(item => {
 });
 
 dom.stepCards.forEach(card => {
-  card.addEventListener('click', () => loadArtifactContent(card.dataset.stage));
+  card.addEventListener('click', () => {
+    if (card.classList.contains('locked')) {
+      showToast('🔒 Esta etapa está bloqueada hasta que apruebes formalmente la etapa previa.', 'warning');
+      return;
+    }
+    const stageKey = card.dataset.stage;
+    if (stageKey === 'deploy') {
+      showToast('🚀 La Etapa 7 (Deploy Cloud/DevOps) se encuentra en preparación para la siguiente fase.', 'info');
+      return;
+    }
+    loadArtifactContent(stageKey);
+  });
 });
 
 dom.btnViewRendered.addEventListener('click', () => {

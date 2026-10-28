@@ -1,6 +1,9 @@
 ---
 name: domain-modeling
 description: Disciplina para capturar el lenguaje ubicuo, modelos de dominio y registros de decisiones arquitectónicas (ADRs) durante la definición de sistemas.
+version: 1.0.0
+type: knowledge
+applies_to_stages: [discovery_notes, prd, system_design]
 ---
 
 # Skill: Domain Modeling & ADRs

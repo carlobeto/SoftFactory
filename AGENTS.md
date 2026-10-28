@@ -125,11 +125,28 @@
 
 
 
+\### 2.6. Etapa 6: Entorno de Pruebas Local (Local Test Runner & Sandbox UI)
+
+\* \*\*Perfil y Meta:\*\* Generar el entorno de ejecución inmediata y verificación para testing en la PC de desarrollo del usuario, desacoplado de la infraestructura de producción o nube.
+
+\* \*\*Restricciones:\*\* Configuración exclusiva para entorno local (`localhost` y `.venv` nativo). La generación de manifiestos para la nube, Dockerfiles de producción y orquestación multi-contenedor se delega a una etapa posterior de DevOps (Etapa 7).
+
+\* \*\*Herramientas autorizadas:\*\* Generador de runners (`local_runner.py`), analizador de endpoints y sembrador de datos de prueba locales.
+
+\* \*\*Entrada (Input):\*\* Código validado en `workspace/` con `QA_REPORT.md` en estado `APPROVED`.
+
+\* \*\*Salida (Contrato de Entrega):\*\*
+  1. `projects/<Nombre_Proyecto>/workspace/local_runner.py` (Punto de entrada estandarizado con soporte para `--port`, `--host`, healthcheck `/health` y Web Testbench interactivo).
+  2. `projects/<Nombre_Proyecto>/artifacts/05_local_runner/LOCAL_TESTING_SPEC.md` (Especificación, puertos dinámicos y guía de prueba en navegador).
+  3. Metadatos de runtime local en `workflow_context.json`.
+
+
+
 \---
 
 
 
-\## 3. Flujo Secuencial de la Cadena de Montaje con Compuertas de Aprobación Humana (1 a 5)
+\## 3. Flujo Secuencial de la Cadena de Montaje con Compuertas de Aprobación Humana (1 a 6)
 
 1\. `[Usuario]` -> Frase inicial / requerimiento semilla -> `[Etapa 1: Discovery & Grilling]` -> Publica `DISCOVERY_NOTES.md` -> 🛡️ **[Compuerta 1: Revisión y Aprobación Humana del Discovery]**
 
@@ -139,10 +156,16 @@
 
 4\. 🛡️ *Aprobado por Usuario* -> `[Programador]` -> Emite `CHANGE_PLAN.md` -> 🚨 **[Compuerta Crítica 4: AUTORIZACIÓN HUMANA PREVIA A MODIFICAR FUENTES]**
    - El sistema informa al usuario los archivos autorizados y el plan de cambios exacto.
-   - Solo tras la aprobación explícita humana, el Programador escribe código en `environment/workspace/` y genera `model.patch`.
+   - Solo tras la aprobación explícita humana, el Programador escribe código en `projects/<pname>/workspace/` y genera `model.patch`.
 
-5\. `[QA / Testeador]` -> Audita límites y ejecuta pruebas -> Emite `QA_REPORT.md` -> 🛡️ **[Compuerta 5: Aprobación Humana Final para Despliegue/Exportación]**
+5\. `[QA / Testeador]` -> Audita límites y ejecuta pruebas -> Emite `QA_REPORT.md` -> 🛡️ **[Compuerta 5: Aprobación Humana de QA]**
    - Si falla, devuelve `QA_REPORT.md` al `[Programador]` para corrección bajo supervisión humana.
+
+6\. 🛡️ *Aprobado por Usuario* -> `[Runtime Specialist]` -> Emite `LOCAL_TESTING_SPEC.md` y `workspace/local_runner.py` -> 🛡️ **[Compuerta 6: Aprobación Humana del Entorno Local y Habilitación de "Probar App"]**
+   - El usuario valida las rutas y puertos locales en el Dashboard y activa el botón para probar la aplicación en vivo en su navegador.
+
+\* **Regla de Revocación e Invalidación en Cascada (Efecto Dominó):**
+  Si el usuario humano revoca la aprobación de cualquier etapa (o regenera su contenido), **todas las etapas posteriores deben ser regeneradas** de forma obligatoria para garantizar coherencia contractual. Por consiguiente, pasan inmediatamente al estado **'Pendiente'** (`human_approvals = false`), sus artefactos se trasladan a `artifacts/_superseded/<timestamp>/` y sus acciones de generación permanecen bloqueadas hasta que la etapa revocada vuelva a alcanzar el estado 'Aprobado'.
 
 
 
@@ -176,4 +199,35 @@ Para evitar reiniciar proyectos desde cero ante defectos o ampliaciones funciona
      a) **Pruebas de Regresión:** Verifica que las funcionalidades previas sigan pasando al 100%.
      b) **Nuevas Pruebas:** Evalúa los nuevos criterios de aceptación del `DELTA_PRD.md`.
      c) Si aprueba, emite `QA_REPORT.md (APPROVED)` y habilita la confirmación humana para el nuevo tag de versión en Git (ej: `v1.1`).
+
+\---
+
+\## 5. Gobernanza de Skills y Evolución Continua del Motor
+
+Para garantizar que tanto la Software Factory como las aplicaciones que produce puedan evolucionar ordenadamente sin degradar la calidad ni saltarse controles de seguridad, se establecen dos niveles de extensibilidad basados en Skills:
+
+\### 5.1. Evolución del Motor de la Software Factory (Desarrollo y Mejora Continua)
+\* \*\*Versionado y Registro del Motor:\*\* El estado del motor se controla en `factory/factory.json` (`engine_version`, `mode`). Todo cambio o lección aprendida en pruebas se registra de forma acumulativa en `factory/FACTORY_LESSONS.md` y `factory/CHANGELOG.md`.
+\* \*\*Biblioteca Central de Skills (`.agents/skills/`):\*\* Conocimiento y estándares universales compartidos por todos los proyectos (ej. `grill-me`, `api-design`, `domain-modeling`). Cada skill define en su frontmatter YAML: `version`, `type: global_skill` y `applies_to_stages`.
+\* \*\*Promoción de Skills (Proyecto → Motor Global):\*\*
+  1. Si un skill desarrollado para un proyecto específico demuestra ser valioso y maduro para la fábrica, se emite una propuesta de promoción en `factory/skill_proposals/<skill>.json`.
+  2. 🛡️ **Aprobación Humana de Promoción:** El usuario humano evalúa la propuesta. Al aprobarla, el motor copia el skill a `.agents/skills/`, incrementa la versión de parche (`patch bump`) en `factory/factory.json` y registra el evento en `CHANGELOG.md`.
+\* \*\*Suite de Pruebas de Regresión del Motor (`factory_tests/`):\*\* Antes de liberar nuevas versiones de la Software Factory, deben ejecutarse las pruebas de regresión que garantizan que el loader, el aislamiento y las compuertas funcionen sin fallas.
+
+\### 5.2. Personalización y Restricciones por Proyecto (Skills de Proyecto / Overlays)
+Cuando el desarrollador de una aplicación específica necesita fijar reglas duraderas de diseño, convenciones o restricciones de negocio (ej. validaciones de seguridad específicas, esquemas de logging, o patrones de base de datos) que apliquen a futuras etapas de su proyecto:
+\* \*\*Ubicación Exclusiva:\*\* `projects/<Nombre_Proyecto>/.agents/skills/<nombre>/SKILL.md`.
+\* \*\*Regla de Oro de Gobernanza (Sólo Agregar Restricciones):\*\*
+  Un skill de proyecto \*\*TIENE PROHIBIDO RELAJAR O ELIMINAR\*\* restricciones globales, omitir compuertas de aprobación humana o autorizar modificaciones fuera de la superficie de `workspace/`. Un skill que intente relajar compuertas es rechazado por el validador estático (`validate_project_skill`).
+\* \*\*Ciclo de Vida y Activación Controlada:\*\*
+  1. \*\*Propuesta (`proposed`):\*\* El usuario o desarrollador redacta el skill. Permanece inactivo hasta su aprobación.
+  2. \*\*Aprobación e Invalidación en Cascada (`approved`):\*\*
+     🚨 \*\*Efecto Cascada:\*\* Al aprobar un skill de proyecto, la primera etapa afectada y \*\*TODAS las etapas posteriores pasan a estado 'Pendiente'\*\* (`human_approvals = false`). Los artefactos previos correspondientes se trasladan a `artifacts/_superseded/<timestamp>/` para ser regenerados bajo las nuevas directivas. El código fuente en `workspace/` se conserva.
+  3. \*\*Revocación (`revoked`):\*\* Desactiva el skill e invalida en cascada las etapas para permitir regenerarlas sin dicha restricción.
+\* \*\*Consumo Dual:\*\*
+  - \*\*Modo Prompt (LLM):\*\* Inyección contextual de las instrucciones en los prompts de los agentes de cada etapa mediante `build_prompt_context`.
+  - \*\*Modo Datos Estructurados:\*\* Carga determinista de archivos JSON (`questions.json`, configuraciones de validación) mediante `collect_stage_data` para herramientas interactivas y scripts ejecutores.
+\* \*\*Sellado de Procedencia y Trazabilidad:\*\*
+  Todo artefacto generado por los agentes incorpora una sección estandarizada `## Skills y Restricciones Aplicadas` y registra en `workflow_context.json` la huella criptográfica SHA-256 de los skills activos utilizados, asegurando reproducibilidad y auditoría hostil por parte de QA.
+
 

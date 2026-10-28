@@ -241,70 +241,156 @@ body {
   color: #fff;
 }
 
-/* Pipeline Stepper */
-.pipeline-stepper {
+/* Layout Principal */
+.main-content-layout {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  flex: 1;
+  height: calc(100vh - 72px);
+}
+
+/* Menú Lateral de Etapas de Fabricación */
+.sidebar-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 24px;
-  background: rgba(15, 23, 42, 0.5);
-  border-bottom: 1px solid var(--border-subtle);
-  overflow-x: auto;
-  gap: 10px;
+  margin-bottom: 8px;
 }
 
-.step-card {
+.stages-progress-indicator {
+  font-size: 0.68rem;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-weight: 700;
+}
+
+.stages-menu {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  padding: 10px 16px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex: 1;
-  min-width: 170px;
-}
-.step-card:hover {
-  background: var(--bg-card-hover);
-  border-color: rgba(99, 102, 241, 0.4);
-}
-.step-card.active {
-  border-color: var(--primary);
-  background: rgba(99, 102, 241, 0.12);
-  box-shadow: 0 0 15px rgba(99, 102, 241, 0.2);
+  flex-direction: column;
+  gap: 8px;
 }
 
-.step-number {
-  width: 28px;
-  height: 28px;
+.stage-sidebar-item.step-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  background: rgba(22, 30, 49, 0.6);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 9px 12px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  min-width: 0;
+  user-select: none;
+}
+
+.stage-sidebar-item.step-card:hover:not(.locked) {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(99, 102, 241, 0.45);
+  transform: translateX(3px);
+}
+
+.stage-sidebar-item.step-card.active {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.18), rgba(56, 189, 248, 0.09));
+  border-color: var(--primary);
+  border-left: 3px solid var(--primary);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.2);
+}
+
+.stage-sidebar-item.step-card.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(15, 23, 42, 0.35);
+}
+
+.stage-sidebar-item.step-card.locked:hover {
+  background: rgba(244, 63, 94, 0.05);
+  border-color: rgba(244, 63, 94, 0.25);
+}
+
+.stage-nav-number {
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
-}
-.step-card.active .step-number {
-  background: var(--primary);
-  color: #fff;
+  flex-shrink: 0;
+  transition: all 0.2s;
 }
 
-.step-info {
-  display: flex;
-  flex-direction: column;
+.stage-sidebar-item.active .stage-nav-number {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
 }
-.step-title {
+
+.stage-sidebar-item.step-approved .stage-nav-number {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.stage-nav-title {
   font-size: 0.82rem;
   font-weight: 600;
-  color: #fff;
+  color: #e2e8f0;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.step-sub {
-  font-size: 0.7rem;
-  color: var(--text-dim);
+
+.stage-sidebar-item.active .stage-nav-title {
+  color: #c7d2fe;
+}
+
+.stage-status-icon {
+  font-size: 0.85rem;
+  margin-left: auto;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  opacity: 0.9;
+  transition: transform 0.2s;
+}
+
+.stage-status-icon.icon-locked {
+  opacity: 0.55;
+  font-size: 0.78rem;
+}
+
+.stage-status-icon.icon-pending {
+  opacity: 0.4;
+  font-size: 0.65rem;
+}
+
+.stage-status-icon.icon-review {
+  font-size: 0.82rem;
+  animation: pulseReview 2.2s infinite ease-in-out;
+}
+
+.stage-status-icon.icon-approved {
+  font-size: 0.85rem;
+  filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4));
+}
+
+@keyframes pulseReview {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.15); }
 }
 
 .step-status-badge {
@@ -313,19 +399,7 @@ body {
   padding: 2px 7px;
   border-radius: 10px;
   font-weight: 600;
-}
-
-.step-arrow {
-  color: var(--text-dim);
-  font-size: 0.85rem;
-}
-
-/* Layout Principal */
-.main-content-layout {
-  display: grid;
-  grid-template-columns: 290px 1fr;
-  flex: 1;
-  height: calc(100vh - 140px);
+  flex-shrink: 0;
 }
 
 /* Sidebar */
@@ -1320,3 +1394,53 @@ button:disabled, .btn:disabled {
   font-weight: 700;
   text-transform: uppercase;
 }
+
+/* Botón Probar Aplicación */
+.btn-run-app {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: #fff;
+  font-weight: 700;
+  border: 1px solid rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-run-app:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
+  transform: translateY(-1px);
+}
+
+.btn-run-app.app-running {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+  70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* Utilidades para Skills y Modales */
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  border-radius: 4px;
+}
+
+.skill-card {
+  transition: all 0.2s ease;
+}
+.skill-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+

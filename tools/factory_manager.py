@@ -73,15 +73,37 @@ def get_project_dir(project_name: Optional[str] = None) -> Path:
 def get_project_paths(project_name: Optional[str] = None) -> dict[str, Path]:
     """
     Retorna el diccionario con todas las rutas autocontenidas de un proyecto.
-    Estructura:
+
+    Estructura del directorio del proyecto:
       projects/<nombre>/
         artifacts/
           01_prd/
           02_system_design/
           03_code_patches/
           04_qa_reports/
+          05_local_runner/
+          06_deploy/
         workspace/
         workflow_context.json
+        .agents/
+          skills/
+          rules/
+
+    Claves retornadas en el diccionario:
+      - project_name: Nombre limpio del proyecto.
+      - root: Ruta raíz del proyecto (projects/<nombre>).
+      - artifacts: Directorio central de artefactos.
+      - 01_prd: Artefactos de Etapa 1 y 2 (DISCOVERY_NOTES.md, PRD.md).
+      - 02_system_design: Artefactos de Etapa 3 (SYSTEM_DESIGN.md, TASKS.md).
+      - 03_code_patches: Artefactos de Etapa 4 (CHANGE_PLAN.md, model.patch).
+      - 04_qa_reports: Artefactos de Etapa 5 (QA_REPORT.md).
+      - 05_local_runner: Artefactos de Etapa 6 (LOCAL_TESTING_SPEC.md).
+      - 06_deploy: Artefactos de Etapa 7 (DEPLOY_SPEC.md).
+      - workspace: Directorio de fuentes y código editable de la aplicación.
+      - context: Archivo de estado y gobernanza workflow_context.json.
+      - agents_overlay: Directorio .agents/ para gobernanza y extensiones por proyecto.
+      - project_skills: Skills exclusivos del proyecto (.agents/skills/).
+      - project_rules: Reglas exclusivas del proyecto (.agents/rules/).
     """
     proj_dir = get_project_dir(project_name)
     return {
@@ -92,8 +114,13 @@ def get_project_paths(project_name: Optional[str] = None) -> dict[str, Path]:
         "02_system_design": proj_dir / "artifacts" / "02_system_design",
         "03_code_patches": proj_dir / "artifacts" / "03_code_patches",
         "04_qa_reports": proj_dir / "artifacts" / "04_qa_reports",
+        "05_local_runner": proj_dir / "artifacts" / "05_local_runner",
+        "06_deploy": proj_dir / "artifacts" / "06_deploy",
         "workspace": proj_dir / "workspace",
         "context": proj_dir / "workflow_context.json",
+        "agents_overlay": proj_dir / ".agents",
+        "project_skills": proj_dir / ".agents" / "skills",
+        "project_rules": proj_dir / ".agents" / "rules",
     }
 
 
@@ -137,6 +164,8 @@ def list_projects() -> list[dict[str, Any]]:
             "change_plan": (paths["03_code_patches"] / "CHANGE_PLAN.md").exists(),
             "patch": (paths["03_code_patches"] / "model.patch").exists(),
             "qa_report": (paths["04_qa_reports"] / "QA_REPORT.md").exists(),
+            "local_runner": (paths["05_local_runner"] / "LOCAL_TESTING_SPEC.md").exists(),
+            "deploy": (paths["06_deploy"] / "DEPLOY_SPEC.md").exists(),
         }
         completed_stages = sum(1 for v in artifacts_status.values() if v)
 
@@ -170,9 +199,35 @@ def create_new_project(project_name: str, requirement: Optional[str] = None) -> 
     paths = get_project_paths(clean_name)
     proj_root = paths["root"]
 
-    # Crear directorios del proyecto
-    for key in ["01_prd", "02_system_design", "03_code_patches", "04_qa_reports", "workspace"]:
+    # Crear directorios del proyecto (incluye overlay .agents/ para skills y reglas propias)
+    for key in ["01_prd", "02_system_design", "03_code_patches", "04_qa_reports", "05_local_runner",
+                "06_deploy", "workspace", "project_skills", "project_rules"]:
         paths[key].mkdir(parents=True, exist_ok=True)
+
+    rules_file = paths["project_rules"] / "PROJECT_RULES.md"
+    if not rules_file.exists():
+        rules_file.write_text(
+            f"# Reglas del Proyecto: {clean_name}\n\n"
+            "Restricciones duraderas propias de esta aplicación. Se gestionan como skills de proyecto en\n"
+            "`.agents/skills/<nombre>/SKILL.md` y requieren aprobación humana (AGENTS.md §5).\n\n"
+            "> Solo pueden AGREGAR restricciones. No pueden reemplazar skills globales ni relajar compuertas.\n",
+            encoding="utf-8",
+        )
+
+    # Preservar skills de proyecto ya registrados (son preferencias duraderas, sobreviven a un reset)
+    previous_project_skills = {}
+    if paths["context"].exists():
+        try:
+            with open(paths["context"], "r", encoding="utf-8") as f:
+                previous_project_skills = json.load(f).get("WORKFLOW_CONTEXT", {}).get("project_skills", {})
+        except Exception:
+            pass
+
+    try:
+        from tools.skill_loader import get_engine_version
+        engine_version = get_engine_version()
+    except Exception:
+        engine_version = "unknown"
 
     # Inicializar workflow_context.json a partir de la plantilla sin alterar la plantilla
     context_data = {}
@@ -189,6 +244,7 @@ def create_new_project(project_name: str, requirement: Optional[str] = None) -> 
         "status": "INITIALIZED",
         "created_at": datetime.datetime.now().isoformat(),
         "project_directory": str(proj_root),
+        "engine_version": engine_version,
     }
     context_data["WORKFLOW_CONTEXT"]["human_approvals"] = {
         "discovery_notes": False,
@@ -197,7 +253,12 @@ def create_new_project(project_name: str, requirement: Optional[str] = None) -> 
         "change_plan": False,
         "code_modification": False,
         "qa_report": False,
+        "local_runner": False,
+        "deploy": False,
     }
+    context_data["WORKFLOW_CONTEXT"]["project_skills"] = previous_project_skills
+    context_data["WORKFLOW_CONTEXT"]["skills_snapshot"] = {}
+    context_data["WORKFLOW_CONTEXT"]["artifact_provenance"] = {}
     context_data["WORKFLOW_CONTEXT"]["file_boundaries_template"] = {
         "allowed_to_touch": [f"projects/{clean_name}/workspace/*"],
         "strictly_forbidden": [
@@ -209,6 +270,9 @@ def create_new_project(project_name: str, requirement: Optional[str] = None) -> 
             "AGENTS.md",
             "shared_pool/*",
             "environment/*",
+            ".agents/*",
+            "factory/*",
+            f"projects/{clean_name}/.agents/*",
         ],
     }
 
@@ -268,10 +332,26 @@ def get_current_project_metadata(project_name: Optional[str] = None) -> dict[str
         try:
             with open(ctx_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                return data.get("WORKFLOW_CONTEXT", {}).get("project_metadata", {})
+                meta = data.get("WORKFLOW_CONTEXT", {}).get("project_metadata", {})
+                if meta:
+                    meta["project_name"] = paths["project_name"]
+                    return meta
         except Exception:
             pass
     return {"project_name": paths["project_name"], "status": "INITIALIZED"}
+
+
+def get_workflow_context(project_name: Optional[str] = None) -> dict[str, Any]:
+    """Obtiene el contenido completo de WORKFLOW_CONTEXT del proyecto."""
+    paths = get_project_paths(project_name)
+    ctx_file = paths["context"]
+    if ctx_file.exists():
+        try:
+            with open(ctx_file, "r", encoding="utf-8") as f:
+                return json.load(f).get("WORKFLOW_CONTEXT", {})
+        except Exception:
+            pass
+    return {}
 
 
 def export_application(
@@ -333,6 +413,8 @@ def export_application(
             (paths["03_code_patches"] / "CHANGE_PLAN.md", "03_CHANGE_PLAN.md"),
             (paths["03_code_patches"] / "model.patch", "03_model.patch"),
             (paths["04_qa_reports"] / "QA_REPORT.md", "04_QA_REPORT.md"),
+            (paths["05_local_runner"] / "LOCAL_TESTING_SPEC.md", "05_LOCAL_TESTING_SPEC.md"),
+            (paths["06_deploy"] / "DEPLOY_SPEC.md", "06_DEPLOY_SPEC.md"),
         ]
 
         for src, name in artifact_sources:
@@ -405,7 +487,7 @@ def reset_environment(
         paths["workspace"].mkdir(parents=True, exist_ok=True)
 
     # Limpiar artefactos del proyecto
-    for stage in ["01_prd", "02_system_design", "03_code_patches", "04_qa_reports"]:
+    for stage in ["01_prd", "02_system_design", "03_code_patches", "04_qa_reports", "05_local_runner", "06_deploy"]:
         s_dir = paths[stage]
         if s_dir.exists():
             for item in s_dir.iterdir():
@@ -445,14 +527,18 @@ def print_status(project_name: Optional[str] = None):
     tasks_exists = (paths["02_system_design"] / "TASKS.md").exists()
     patch_exists = (paths["03_code_patches"] / "model.patch").exists()
     qa_exists = (paths["04_qa_reports"] / "QA_REPORT.md").exists()
+    local_runner_exists = (paths["05_local_runner"] / "LOCAL_TESTING_SPEC.md").exists()
+    deploy_exists = (paths["06_deploy"] / "DEPLOY_SPEC.md").exists()
 
     print("\nArtefactos del Proyecto:")
-    print(f"  [1] DISCOVERY_NOTES.md:  {'PRESENTE' if discovery_exists else 'VACÍO'}")
-    print(f"  [2] PRD.md:              {'PRESENTE' if prd_exists else 'VACÍO'}")
-    print(f"  [3] SYSTEM_DESIGN.md:    {'PRESENTE' if design_exists else 'VACÍO'}")
-    print(f"  [3] TASKS.md:            {'PRESENTE' if tasks_exists else 'VACÍO'}")
-    print(f"  [4] model.patch:         {'PRESENTE' if patch_exists else 'VACÍO'}")
-    print(f"  [5] QA_REPORT.md:        {'PRESENTE' if qa_exists else 'VACÍO'}")
+    print(f"  [1] DISCOVERY_NOTES.md:   {'PRESENTE' if discovery_exists else 'VACÍO'}")
+    print(f"  [2] PRD.md:               {'PRESENTE' if prd_exists else 'VACÍO'}")
+    print(f"  [3] SYSTEM_DESIGN.md:     {'PRESENTE' if design_exists else 'VACÍO'}")
+    print(f"  [3] TASKS.md:             {'PRESENTE' if tasks_exists else 'VACÍO'}")
+    print(f"  [4] model.patch:          {'PRESENTE' if patch_exists else 'VACÍO'}")
+    print(f"  [5] QA_REPORT.md:         {'PRESENTE' if qa_exists else 'VACÍO'}")
+    print(f"  [6] LOCAL_TESTING_SPEC:   {'PRESENTE' if local_runner_exists else 'VACÍO'}")
+    print(f"  [7] DEPLOY_SPEC.md:       {'PRESENTE' if deploy_exists else 'VACÍO'}")
 
     ws_files = list(paths["workspace"].glob("**/*")) if paths["workspace"].exists() else []
     files_only = [f for f in ws_files if f.is_file() and "__pycache__" not in str(f)]

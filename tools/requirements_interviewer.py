@@ -60,189 +60,160 @@ def ask_round_question(q_id, title, description, options, recommended, interacti
     return selected_code, selected_text
 
 
+# ---------------------------------------------------------------------------
+# Árbol de preguntas: se lee de los skills activos de la Etapa 1 (modo datos)
+# ---------------------------------------------------------------------------
+
+# Claves núcleo que el resto de la cadena (PM, Arquitecto, parse_discovery_notes) espera siempre.
+CORE_KEYS = [
+    "api_style", "ui_layout", "ui_theme", "consumers", "entities", "auth_scheme", "error_format",
+    "persistence", "caching", "validation", "deployment",
+]
+
+
+def load_question_tree(project_name: str = None) -> list[dict]:
+    """
+    Retorna las rondas de preguntas: primero las de 'grill-me' (global) y luego las que
+    AGREGUEN los skills de proyecto aprobados para la etapa 'discovery_notes'.
+    Cada ronda queda anotada con 'source' (nombre del skill que la aporta).
+    """
+    rounds: list[dict] = []
+    try:
+        from tools.skill_loader import GLOBAL_SKILLS_DIR, collect_stage_data
+        contributions = collect_stage_data("discovery_notes", "questions.json", project_name)
+        if not any(sk.name == "grill-me" for sk, _ in contributions):
+            base = GLOBAL_SKILLS_DIR / "grill-me" / "questions.json"
+            if base.exists():
+                contributions.insert(0, (type("S", (), {"name": "grill-me"})(), json.loads(base.read_text(encoding="utf-8"))))
+        contributions.sort(key=lambda c: c[0].name != "grill-me")
+        seen_keys: set[str] = set()
+        for sk, data in contributions:
+            for rnd in data.get("rounds", []):
+                qs = [q for q in rnd.get("questions", []) if q.get("key") and q["key"] not in seen_keys]
+                if not qs:
+                    continue
+                seen_keys.update(q["key"] for q in qs)
+                rounds.append({"title": rnd.get("title", f"Ronda ({sk.name})"), "source": sk.name, "questions": qs})
+    except Exception as e:
+        print(f"[Interviewer] No se pudo cargar el árbol de preguntas desde los skills: {e}")
+    if not rounds:
+        raise RuntimeError(
+            "No se encontró el árbol de preguntas. Verifique .agents/skills/grill-me/questions.json"
+        )
+    return rounds
+
+
+def _match_rule(rules: list[dict], prompt: str):
+    low = prompt.lower()
+    for r in rules or []:
+        if any(w.lower() in low for w in r.get("prompt_contains_any", [])):
+            return r.get("value")
+    return None
+
+
+def resolve_default(question: dict, prompt: str) -> tuple[str, str]:
+    """Retorna (código, texto) recomendado para una pregunta dado el requerimiento semilla."""
+    if question.get("type") == "free_text":
+        text = _match_rule(question.get("default_if"), prompt) or question.get("default", "")
+        return "custom", text
+    options = question.get("options", {})
+    code = _match_rule(question.get("recommend_if"), prompt) or question.get("recommended") or next(iter(options), "")
+    return code, options.get(code, code)
+
+
+def default_answers(prompt: str, project_name: str = None) -> dict[str, str]:
+    """Respuestas por defecto (Smart Defaults) para todo el árbol activo."""
+    answers = {}
+    for rnd in load_question_tree(project_name):
+        for q in rnd["questions"]:
+            answers[q["key"]] = resolve_default(q, prompt)[1]
+    return answers
+
+
+def complete_answers_with_defaults(prompt: str, answers: dict, project_name: str = None) -> dict[str, str]:
+    """Completa las claves faltantes (ej. preguntas agregadas por skills de proyecto) con sus defaults."""
+    merged = default_answers(prompt, project_name)
+    merged.update({k: v for k, v in (answers or {}).items() if v})
+    return merged
+
+
+def get_matrix_labels(project_name: str = None) -> dict[str, str]:
+    labels = {}
+    try:
+        for rnd in load_question_tree(project_name):
+            for q in rnd["questions"]:
+                labels[q["key"]] = q.get("matrix_label") or q.get("title", q["key"])
+    except Exception:
+        pass
+    return labels
+
+
 def run_grill_interview(initial_prompt: str, interactive: bool = True, project_name: str = None):
     """
     Ejecuta las rondas del árbol de diseño basadas en la filosofía 'grill-me'.
+    El árbol se lee de los skills activos (grill-me + skills de proyecto aprobados).
     Guarda los artefactos de forma aislada en projects/<project_name>/artifacts/01_prd/.
     """
-    paths = get_project_paths(project_name) if get_project_paths else {"01_prd": Path("projects/app/artifacts/01_prd")}
+    pname = project_name or (get_active_project_name() if get_active_project_name else "app")
+    paths = get_project_paths(pname) if get_project_paths else {"01_prd": Path(f"projects/{pname}/artifacts/01_prd")}
     prd_pool = paths["01_prd"]
     prd_pool.mkdir(parents=True, exist_ok=True)
 
+    active_skills = []
+    try:
+        from tools.skill_loader import get_stage_skills
+        active_skills = get_stage_skills("discovery_notes", pname)
+    except Exception:
+        pass
+    skills_info = ", ".join(f"{s.name}@{s.version} ({s.scope})" for s in active_skills) if active_skills else "grill-me@1.1.0 (global)"
+
     print("=" * 70)
-    print("  SOFTWARE FACTORY: SESIÓN DE REQUIREMENTS GRILLING & DISCOVERY")
-    print("  Basado en la metodología Grill-Me de AI Hero")
+    print("  SOFTWARE FACTORY: SESIÓN DE REQUIREMENTS GRILLING & DISCOVERY (ETAPA 1)")
+    print("  Metodología Grill-Me de AI Hero — Gobernanza de Skills AGENTS.md §5")
+    print(f"  Skills Activos: [{skills_info}]")
     print("=" * 70)
     print(f"Requerimiento Semilla: \"{initial_prompt}\"")
+    print(f"Proyecto Destino:       \"{pname}\"")
     print("Iniciando rondas de preguntas para desgranar el árbol de decisiones...\n")
 
     answers = {}
+    q_id = 0
+    for rnd in load_question_tree(project_name):
+        skill_name = rnd.get("source", "grill-me")
+        print(f"\n--- [{rnd['title']}] [Skill: {skill_name}] ---")
+        for q in rnd["questions"]:
+            q_id += 1
+            code, text = resolve_default(q, initial_prompt)
+            if q.get("type") == "free_text":
+                print(f"\n❓ [Q{q_id}] - {q.get('title', q['key'])}")
+                print(f"   {q.get('description', '')}")
+                print(f"   ➡️  Recomendación: {text}")
+                value = text
+                if interactive and sys.stdin.isatty():
+                    try:
+                        user_input = input(f"   Respuesta (ENTER para '{text}'): ").strip()
+                        value = user_input or text
+                    except (EOFError, KeyboardInterrupt):
+                        value = text
+                answers[q["key"]] = value
+                print(f"   ✓ [Aceptado]: {value}")
+            else:
+                _, answers[q["key"]] = ask_round_question(
+                    q_id=q_id,
+                    title=q.get("title", q["key"]),
+                    description=q.get("description", ""),
+                    options=q.get("options", {}),
+                    recommended=code,
+                    interactive=interactive,
+                )
 
-    # -------------------------------------------------------------
-    # RONDA 1: Propósito, Arquitectura y Entidades Centrales
-    # -------------------------------------------------------------
-    print("--- [RONDA 1: Propósito del Sistema, Interfaz y Entidades] ---")
-
-    # Q1: Estilo arquitectónico de API
-    _, answers["api_style"] = ask_round_question(
-        q_id=1,
-        title="Estilo Arquitectónico y Protocolo",
-        description="¿Qué estilo de API y formato de transferencia se requiere?",
-        options={
-            "rest_json": "RESTful API sobre HTTP con payloads JSON y códigos de estado estándar",
-            "fastapi": "FastAPI (Python) asíncrono con esquemas Pydantic y documentación OpenAPI/Swagger automática",
-            "grpc": "gRPC con Protobuf para alta performance y baja latencia",
-            "cli_api": "Herramienta CLI interactiva con comandos enriquecidos",
-        },
-        recommended="fastapi" if "fastapi" in initial_prompt.lower() else "rest_json",
-        interactive=interactive,
-    )
-
-    # Q2: Consumidores previstos
-    _, answers["consumers"] = ask_round_question(
-        q_id=2,
-        title="Consumidores y Clientes del Sistema",
-        description="¿Quiénes interactuarán directamente con esta API?",
-        options={
-            "spa_mobile": "Aplicaciones frontend (SPA Web / React / Vue) y aplicaciones móviles",
-            "microservices": "Otros microservicios y sistemas backend (comunicación inter-servicio)",
-            "third_party": "Desarrolladores y clientes externos a través de una API pública con rate-limiting",
-            "internal_cli": "Operadores de sistemas mediante scripts y terminales CLI",
-        },
-        recommended="spa_mobile",
-        interactive=interactive,
-    )
-
-    # Q3: Entidades del dominio
-    print("\n❓ [Q3] - Entidades y Recursos Principales del Dominio")
-    print("   Define los 2 a 4 recursos clave que gestionará la API (ej: Productos, Clientes, Pedidos).")
-    default_entities = "Items, Categorias, Movimientos"
-    if "clima" in initial_prompt.lower():
-        default_entities = "Ciudades, Pronósticos, Alertas"
-    elif "tarea" in initial_prompt.lower() or "todo" in initial_prompt.lower():
-        default_entities = "Tareas, Proyectos, Etiquetas"
-    elif "usuario" in initial_prompt.lower() or "auth" in initial_prompt.lower():
-        default_entities = "Usuarios, Roles, Sesiones"
-    elif "inventario" in initial_prompt.lower() or "stock" in initial_prompt.lower():
-        default_entities = "Productos, Almacenes, Lotes, Stock"
-
-    print(f"   ➡️  Recomendación: {default_entities}")
-    if interactive and sys.stdin.isatty():
-        try:
-            ent_input = input(f"   Ingresa las entidades separadas por coma (ENTER para '{default_entities}'): ").strip()
-            answers["entities"] = ent_input if ent_input else default_entities
-        except (EOFError, KeyboardInterrupt):
-            answers["entities"] = default_entities
-    else:
-        answers["entities"] = default_entities
-    print(f"   ✓ [Entidades fijadas]: {answers['entities']}")
-
-    # -------------------------------------------------------------
-    # RONDA 2: Seguridad, Autenticación y Autorización
-    # -------------------------------------------------------------
-    print("\n--- [RONDA 2: Seguridad, Autenticación y Esquema de Errores] ---")
-
-    # Q4: Autenticación
-    _, answers["auth_scheme"] = ask_round_question(
-        q_id=4,
-        title="Esquema de Autenticación y Seguridad",
-        description="¿Qué mecanismo de protección de endpoints se implementará?",
-        options={
-            "jwt_bearer": "Bearer Token (JWT) con expiración y soporte para Refresh Token",
-            "api_key": "Cabecera 'X-API-Key' estática o administrable para cada cliente",
-            "session_cookies": "Cookies de sesión HTTP-Only (Seguras contra XSS/CSRF)",
-            "public_no_auth": "Acceso libre/público sin autenticación (sólo para endpoints informativos o MVP)",
-        },
-        recommended="jwt_bearer",
-        interactive=interactive,
-    )
-
-    # Q5: Formato de Errores
-    _, answers["error_format"] = ask_round_question(
-        q_id=5,
-        title="Estructura de Respuestas de Error",
-        description="¿Cómo responderá la API ante excepciones y fallos de validación (4xx / 5xx)?",
-        options={
-            "rfc7807": "RFC 7807 (Problem Details: 'type', 'title', 'status', 'detail', 'invalid_params')",
-            "standard_json": "JSON uniforme simple: {'success': false, 'error': {'code': '...', 'message': '...'}}",
-            "http_status_only": "Códigos de estado HTTP básicos con texto plano",
-        },
-        recommended="rfc7807",
-        interactive=interactive,
-    )
-
-    # -------------------------------------------------------------
-    # RONDA 3: Persistencia, Volumen y Rendimiento
-    # -------------------------------------------------------------
-    print("\n--- [RONDA 3: Persistencia de Datos y Rendimiento] ---")
-
-    # Q6: Base de datos / Persistencia
-    _, answers["persistence"] = ask_round_question(
-        q_id=6,
-        title="Motor de Base de Datos y Persistencia",
-        description="¿Dónde residirán los datos del sistema?",
-        options={
-            "sqlite": "SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)",
-            "postgresql": "PostgreSQL relacional con soporte para transacciones complejas y extensiones",
-            "in_memory": "Almacenamiento en memoria volátil (Dicts/Memory-DB) con opción de volcado JSON",
-            "mongodb": "Base de datos de documentos NoSQL para esquemas altamente variables",
-        },
-        recommended="sqlite",
-        interactive=interactive,
-    )
-
-    # Q7: Estrategia de Caché
-    _, answers["caching"] = ask_round_question(
-        q_id=7,
-        title="Estrategia de Caché y Optimización de Consultas",
-        description="¿Se requiere acelerar las lecturas con mecanismos de caché?",
-        options={
-            "ttl_memory": "Caché en memoria local con tiempo de expiración (TTL) y purga automática",
-            "redis": "Caché distribuida externa Redis con soporte pub/sub",
-            "no_cache": "Sin capa de caché (consultas directas a persistencia para el MVP)",
-        },
-        recommended="ttl_memory",
-        interactive=interactive,
-    )
-
-    # -------------------------------------------------------------
-    # RONDA 4: Historias de Usuario, Validación y Despliegue
-    # -------------------------------------------------------------
-    print("\n--- [RONDA 4: Criterios de Aceptación, Validación y Despliegue] ---")
-
-    # Q8: Validación de esquemas
-    _, answers["validation"] = ask_round_question(
-        q_id=8,
-        title="Validación de Entradas y Tipado Estricto",
-        description="¿Cómo se verificarán los payloads enviados por los clientes?",
-        options={
-            "strict_schemas": "Esquemas estrictos tipados (Pydantic / dataclasses) con rechazo automático 422",
-            "manual_validation": "Validación manual ligera de campos obligatorios en cada controlador",
-            "permissive": "Aceptación flexible con conversión de tipos automática",
-        },
-        recommended="strict_schemas",
-        interactive=interactive,
-    )
-
-    # Q9: Despliegue
-    _, answers["deployment"] = ask_round_question(
-        q_id=9,
-        title="Estrategia de Empaquetado y Despliegue",
-        description="¿Cómo se empaquetará la solución para producción?",
-        options={
-            "docker_slim": "Contenedor Docker (python:3.11-slim) con entrypoint preconfigurado y healthcheck",
-            "standalone_cli": "Script Python ejecutable o paquete instalable con pyproject.toml",
-            "compose": "Entorno multi-servicio con Docker Compose",
-        },
-        recommended="docker_slim",
-        interactive=interactive,
-    )
+    answers = complete_answers_with_defaults(initial_prompt, answers, project_name)
 
     # -------------------------------------------------------------
     # COMPILACIÓN DEL ARTEFACTO: DISCOVERY_NOTES.md
     # -------------------------------------------------------------
     discovery_file = prd_pool / "DISCOVERY_NOTES.md"
-    generate_discovery_notes(initial_prompt, answers, discovery_file)
+    generate_discovery_notes(initial_prompt, answers, discovery_file, project_name=project_name)
 
     # Actualizar también NEW_REQUIREMENT.txt
     req_file = prd_pool / "NEW_REQUIREMENT.txt"
@@ -259,15 +230,28 @@ def run_grill_interview(initial_prompt: str, interactive: bool = True, project_n
     print("  [GRILL-ME COMPLETADO] ARTEFACTOS GENERADOS CON ÉXITO")
     print("=" * 70)
     print(f"-> Artefacto de Discovery generado en: {discovery_file}")
+    if active_skills:
+        print(f"-> Skills y restricciones aplicadas:   {', '.join(f'{s.name}@{s.version}' for s in active_skills)}")
     print("-> Las decisiones han sido congeladas. El Product Manager puede generar el PRD sin suposiciones.")
     print("=" * 70 + "\n")
 
     return discovery_file, answers
 
 
-def generate_discovery_notes(initial_prompt: str, answers: dict, output_path: Path):
+def generate_discovery_notes(initial_prompt: str, answers: dict, output_path: Path, project_name: str = None):
     """Genera el documento DISCOVERY_NOTES.md en formato Markdown enriquecido."""
+    try:
+        answers = complete_answers_with_defaults(initial_prompt, answers, project_name)
+    except Exception:
+        pass
     entities_list = [e.strip() for e in answers["entities"].split(",") if e.strip()]
+
+    # Decisiones adicionales aportadas por skills de proyecto (preguntas fuera del núcleo)
+    labels = get_matrix_labels(project_name)
+    extra_rows = "".join(
+        f"| **{labels.get(k, k)}** | {v} | Restricción agregada por skill del proyecto |\n"
+        for k, v in answers.items() if k not in CORE_KEYS
+    )
 
     endpoints_md = ""
     for ent in entities_list:
@@ -321,6 +305,8 @@ Característica: Gestión de {entities_list[0] if entities_list else 'Recursos'}
 | Dimensión | Decisión Adoptada | Razón Técnica / Implicancia |
 | :--- | :--- | :--- |
 | **Estilo Arquitectónico** | {answers['api_style']} | Contrato estructurado predecible para el cliente |
+| **Pantalla Inicial & UI** | {answers.get('ui_layout', 'Dashboard Web Interactivo con componentes dinámicos')} | Disposición visual y componentes de la pantalla inicial |
+| **Tema Visual & Estilo** | {answers.get('ui_theme', 'Modern Dark Mode')} | Sistema de diseño, estética y tipografía moderna |
 | **Consumidores Clave** | {answers['consumers']} | Define los requerimientos de latencia y CORS |
 | **Seguridad & Auth** | {answers['auth_scheme']} | Aislamiento y control de acceso robusto |
 | **Gestión de Errores** | {answers['error_format']} | Estándar predecible para simplificar la integración frontend |
@@ -328,7 +314,7 @@ Característica: Gestión de {entities_list[0] if entities_list else 'Recursos'}
 | **Caché & Rendimiento** | {answers['caching']} | Evita sobrecarga en operaciones de lectura repetitivas |
 | **Validación de Datos** | {answers['validation']} | Previene inyección y corrupción del modelo |
 | **Estrategia Despliegue** | {answers['deployment']} | Autocontenido y ejecutable en cualquier entorno |
-
+{extra_rows}
 ---
 
 ## 3. Modelo de Dominio y Recursos Clave
@@ -362,8 +348,20 @@ Las siguientes entidades componen el núcleo de datos del sistema:
 - **Justificación:** Facilita que el QA Tester audite de forma hostil los casos extremos y códigos de estado.
 """
 
+    try:
+        from tools.skill_loader import record_provenance, render_skills_section
+        content += render_skills_section("discovery_notes", project_name)
+    except Exception:
+        record_provenance = None
+
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(content)
+
+    if record_provenance and get_project_paths:
+        try:
+            record_provenance("discovery_notes", project_name, [Path(output_path)])
+        except Exception:
+            pass
 
 
 def parse_discovery_notes(content: str) -> dict[str, str]:
@@ -371,6 +369,8 @@ def parse_discovery_notes(content: str) -> dict[str, str]:
     parsed = {
         "prompt": "",
         "api_style": "",
+        "ui_layout": "",
+        "ui_theme": "",
         "consumers": "",
         "auth_scheme": "",
         "error_format": "",
@@ -390,6 +390,14 @@ def parse_discovery_notes(content: str) -> dict[str, str]:
             parts = line.split("|")
             if len(parts) >= 3:
                 parsed["api_style"] = parts[2].strip()
+        elif "| **Pantalla Inicial & UI** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["ui_layout"] = parts[2].strip()
+        elif "| **Tema Visual & Estilo** |" in line:
+            parts = line.split("|")
+            if len(parts) >= 3:
+                parsed["ui_theme"] = parts[2].strip()
         elif "| **Consumidores Clave** |" in line:
             parts = line.split("|")
             if len(parts) >= 3:

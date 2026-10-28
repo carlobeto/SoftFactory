@@ -19,3 +19,7 @@ agent_profile:
     - "sandbox_shell"
   outputs:
     - "shared_pool/04_qa_reports/QA_REPORT.md"
+  skills:
+    # Skills consumidos por la etapa (ver tools/skill_loader.py y AGENTS.md §5)
+    required: []
+    optional: [api-design]

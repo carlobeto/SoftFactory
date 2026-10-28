@@ -5,6 +5,11 @@ gestión y aislamiento de proyectos en projects/<nombre>, inspección de Git y e
 """
 
 import json
+import socket
+import subprocess
+import sys
+import time
+import webbrowser
 from pathlib import Path
 from typing import Any, Optional
 
@@ -13,6 +18,56 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+# Diccionario de procesos de prueba en ejecución: project_name -> dict
+APP_PROCESSES: dict[str, dict[str, Any]] = {}
+
+
+def find_free_port(start_port: int = 8000, max_port: int = 8999) -> int:
+    """Encuentra un puerto libre en el rango evitando el puerto 5000 del dashboard."""
+    for p in range(start_port, max_port):
+        if p == 5000:
+            continue
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("127.0.0.1", p))
+                return p
+            except OSError:
+                continue
+    raise RuntimeError("No se encontró ningún puerto libre en el rango 8000-8999")
+
+
+def is_app_running(project_name: str) -> Optional[dict[str, Any]]:
+    """Verifica si el servidor de prueba de un proyecto está activo y respondiendo."""
+    info = APP_PROCESSES.get(project_name)
+    if not info:
+        return None
+    proc = info.get("proc")
+    if proc is not None and proc.poll() is None:
+        port = info.get("port")
+        if port:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.3)
+                    if s.connect_ex(("127.0.0.1", port)) == 0:
+                        return {
+                            "running": True,
+                            "project_name": project_name,
+                            "port": port,
+                            "url": info.get("url", f"http://localhost:{port}"),
+                            "pid": proc.pid,
+                        }
+            except Exception:
+                pass
+        return {
+            "running": True,
+            "project_name": project_name,
+            "port": port,
+            "url": info.get("url", f"http://localhost:{port}"),
+            "pid": proc.pid,
+        }
+    APP_PROCESSES.pop(project_name, None)
+    return None
 
 from tools.dashboard.git_service import (
     commit_project_stage,
@@ -30,12 +85,15 @@ from tools.factory_manager import (
     get_active_project_name,
     get_current_project_metadata,
     get_project_paths,
+    get_workflow_context,
     init_new_project,
     list_projects,
     reset_environment,
     set_active_project,
 )
 from tools.dashboard.agent_runners import (
+    generate_code_implementation,
+    generate_local_runner_artifact,
     generate_prd_artifact,
     generate_system_design_artifact,
     run_qa_audit_and_tests,
@@ -44,6 +102,19 @@ from tools.requirements_interviewer import (
     generate_discovery_notes,
     parse_discovery_notes,
     run_grill_interview,
+)
+from tools.skill_loader import (
+    approve_project_skill,
+    approve_promotion,
+    delete_project_skill,
+    discover_skills,
+    get_factory_info,
+    list_lessons,
+    list_promotion_proposals,
+    propose_project_skill,
+    propose_promotion,
+    register_lesson,
+    revoke_project_skill,
 )
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -94,6 +165,26 @@ class MaintenanceRequest(BaseModel):
     request_type: str  # "bugfix" o "rfc"
     title: str
     description: str
+
+
+class ProposeSkillRequest(BaseModel):
+    name: str
+    description: str
+    applies_to_stages: list[str]
+    instructions_md: str
+    type: str = "project_skill"
+    structured_data: Optional[dict[str, Any]] = None
+    project_name: Optional[str] = None
+
+
+class RegisterLessonRequest(BaseModel):
+    stage: str = "general"
+    symptom: str
+    root_cause: str = ""
+    target: str = "engine"
+    proposal: str = ""
+    project_name: Optional[str] = None
+
 
 
 # --- Endpoints de Gestión de Proyectos Aislados ---
@@ -183,6 +274,7 @@ def get_factory_status(project: Optional[str] = None) -> dict[str, Any]:
         "change_plan": (paths["03_code_patches"] / "CHANGE_PLAN.md").exists(),
         "patch": (paths["03_code_patches"] / "model.patch").exists(),
         "qa_report": (paths["04_qa_reports"] / "QA_REPORT.md").exists(),
+        "local_runner": (paths["05_local_runner"] / "LOCAL_TESTING_SPEC.md").exists(),
     }
 
     # Archivos del workspace del proyecto activo
@@ -205,6 +297,7 @@ def get_factory_status(project: Optional[str] = None) -> dict[str, Any]:
         "change_plan": False,
         "code_modification": False,
         "qa_report": False,
+        "local_runner": False,
     })
 
     return {
@@ -217,6 +310,7 @@ def get_factory_status(project: Optional[str] = None) -> dict[str, Any]:
         "workspace_files": workspace_files,
         "projects": list_projects(),
         "exports": exports,
+        "running_app": is_app_running(pname),
     }
 
 
@@ -233,6 +327,7 @@ def get_active_artifact(artifact_key: str, project: Optional[str] = None):
         "change_plan": paths["03_code_patches"] / "CHANGE_PLAN.md",
         "patch": paths["03_code_patches"] / "model.patch",
         "qa_report": paths["04_qa_reports"] / "QA_REPORT.md",
+        "local_runner": paths["05_local_runner"] / "LOCAL_TESTING_SPEC.md",
         "requirement": paths["01_prd"] / "NEW_REQUIREMENT.txt",
     }
     file_path = mapping.get(artifact_key)
@@ -380,13 +475,29 @@ def validate_stage_execution(stage_key: str, project_paths: dict[str, Any], is_n
             "system_design": "Etapa 3 (Arquitecto - System Design)",
             "code_modification": "Etapa 4 (Programador - Código)",
             "qa_report": "Etapa 5 (QA Hostile Auditor)",
+            "local_runner": "Etapa 6 (Runner Local - Testing PC)",
         }
-        name = stage_names.get(stage_key, stage_key)
-        raise HTTPException(
-            status_code=400,
-            detail=f"No se puede regenerar '{name}': La etapa ya se encuentra APROBADA formalmente. "
-                   f"Para regenerar este documento, primero debes revocar la aprobación existente."
-        )
+        # Caso especial para code_modification: si el workspace está vacío o no existe parche, es la primera ejecución autorizada
+        if stage_key == "code_modification":
+            ws = project_paths["workspace"]
+            has_files = ws.exists() and any(ws.iterdir())
+            patch_file = project_paths["03_code_patches"] / "model.patch"
+            if not has_files or not patch_file.exists():
+                pass  # Permitir la primera generación de código
+            else:
+                name = stage_names.get(stage_key, stage_key)
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"No se puede regenerar '{name}': El código ya se encuentra implementado y APROBADO formalmente. "
+                           f"Para regenerar este código, primero debes revocar la aprobación existente."
+                )
+        else:
+            name = stage_names.get(stage_key, stage_key)
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se puede regenerar '{name}': La etapa ya se encuentra APROBADA formalmente. "
+                       f"Para regenerar este documento, primero debes revocar la aprobación existente."
+            )
 
     # 2. Regla B: Predecesores obligatorios (deben existir y estar en estado 3: Aprobado).
     predecessors = {
@@ -414,6 +525,12 @@ def validate_stage_execution(stage_key: str, project_paths: dict[str, Any], is_n
             "file": project_paths["03_code_patches"] / "model.patch",
             "name": "Etapa 4 (Programador - Código)",
             "doc": "código / model.patch",
+        },
+        "local_runner": {
+            "key": "qa_report",
+            "file": project_paths["04_qa_reports"] / "QA_REPORT.md",
+            "name": "Etapa 5 (QA & Hostile Auditor)",
+            "doc": "QA_REPORT.md",
         },
     }
 
@@ -450,18 +567,41 @@ def run_interview_endpoint(req: InterviewRequest):
     try:
         proj_name = req.project_name or get_active_project_name()
         paths = get_project_paths(proj_name)
+        set_active_project(paths["project_name"])
 
         if not paths["root"].exists() or req.reset_first:
             paths = create_new_project(proj_name, requirement=req.prompt)
         else:
-            validate_stage_execution("discovery_notes", paths, is_new_project=False)
+            # Si el usuario ejecuta la toma de datos sobre un proyecto existente,
+            # esto constituye una generación/regeneración de la Etapa 1.
+            # Según la Regla de Revocación o Regeneración en AGENTS.md, si ya estaba aprobada,
+            # se revoca e invalida en cascada todas las etapas posteriores.
+            approvals = get_project_approvals(paths["context"])
+            if approvals.get("discovery_notes", False):
+                from tools.skill_loader import invalidate_from_stage
+                invalidate_from_stage(proj_name, "prd", "Regeneración de Discovery (Etapa 1)")
+                ctx_file = paths["context"]
+                if ctx_file.exists():
+                    try:
+                        with open(ctx_file, "r", encoding="utf-8") as f:
+                            ctx_data = json.load(f)
+                        ctx_data["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})["discovery_notes"] = False
+                        with open(ctx_file, "w", encoding="utf-8") as f:
+                            json.dump(ctx_data, f, indent=4)
+                    except Exception:
+                        pass
+            else:
+                validate_stage_execution("discovery_notes", paths, is_new_project=False)
 
         output_file = paths["01_prd"] / "DISCOVERY_NOTES.md"
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
         if req.answers:
-            generate_discovery_notes(req.prompt, req.answers, output_file)
+            generate_discovery_notes(req.prompt, req.answers, output_file, project_name=proj_name)
             commit_project_stage(proj_name, "discovery_notes", f"feat(discovery): freeze requirements for '{proj_name}'")
+
+            from tools.skill_loader import invalidate_from_stage
+            invalidate_from_stage(proj_name, "prd", "Regeneración de Discovery (Etapa 1)")
 
             ctx_file = paths["context"]
             if ctx_file.exists():
@@ -469,6 +609,7 @@ def run_interview_endpoint(req: InterviewRequest):
                     with open(ctx_file, "r", encoding="utf-8") as f:
                         ctx_data = json.load(f)
                     ctx_data["WORKFLOW_CONTEXT"]["project_metadata"]["status"] = "DISCOVERY_COMPLETED"
+                    ctx_data["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})["discovery_notes"] = False
                     with open(ctx_file, "w", encoding="utf-8") as f:
                         json.dump(ctx_data, f, indent=4)
                 except Exception:
@@ -484,12 +625,16 @@ def run_interview_endpoint(req: InterviewRequest):
             disc_file, answers = run_grill_interview(req.prompt, interactive=False, project_name=proj_name)
             commit_project_stage(proj_name, "discovery_notes", f"feat(discovery): freeze requirements for '{proj_name}'")
 
+            from tools.skill_loader import invalidate_from_stage
+            invalidate_from_stage(proj_name, "prd", "Regeneración de Discovery (Etapa 1)")
+
             ctx_file = paths["context"]
             if ctx_file.exists():
                 try:
                     with open(ctx_file, "r", encoding="utf-8") as f:
                         ctx_data = json.load(f)
                     ctx_data["WORKFLOW_CONTEXT"]["project_metadata"]["status"] = "DISCOVERY_COMPLETED"
+                    ctx_data["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})["discovery_notes"] = False
                     with open(ctx_file, "w", encoding="utf-8") as f:
                         json.dump(ctx_data, f, indent=4)
                 except Exception:
@@ -507,6 +652,63 @@ def run_interview_endpoint(req: InterviewRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/grill/questions")
+def get_grill_questions(project: Optional[str] = None):
+    """Devuelve las rondas del árbol de preguntas (Design Tree Frontier) y los skills activos para la Etapa 1."""
+    pname = project or get_active_project_name()
+    try:
+        from tools.requirements_interviewer import load_question_tree
+        from tools.skill_loader import get_stage_skills
+        stage_skills = get_stage_skills("discovery_notes", pname)
+        skills_summary = [
+            {
+                "name": s.name,
+                "version": s.version,
+                "scope": s.scope,
+                "type": s.skill_type,
+                "description": s.description,
+            }
+            for s in stage_skills
+        ]
+        rounds = load_question_tree(pname)
+        return {
+            "project_name": pname,
+            "stage": "discovery_notes",
+            "skills": skills_summary,
+            "rounds": rounds,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error cargando preguntas de Grill-Me: {e}")
+
+
+@app.get("/api/stages/{stage_name}/skills")
+def get_stage_skills_endpoint(stage_name: str, project: Optional[str] = None):
+    """Retorna los skills activos y requeridos para una etapa específica del ciclo de vida."""
+    pname = project or get_active_project_name()
+    try:
+        from tools.skill_loader import get_stage_skills, get_profile_skill_manifest
+        stage_skills = get_stage_skills(stage_name, pname)
+        manifest = get_profile_skill_manifest(stage_name)
+        return {
+            "stage": stage_name,
+            "project_name": pname,
+            "required": manifest.get("required", []),
+            "optional": manifest.get("optional", []),
+            "active_skills": [
+                {
+                    "name": s.name,
+                    "version": s.version,
+                    "scope": s.scope,
+                    "type": s.skill_type,
+                    "description": s.description,
+                }
+                for s in stage_skills
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/actions/generate/prd")
 def generate_prd_endpoint(project: Optional[str] = None):
     """Etapa 2: Genera el Documento de Requerimientos de Producto (PRD.md) para el proyecto activo."""
@@ -514,6 +716,10 @@ def generate_prd_endpoint(project: Optional[str] = None):
         pname = project or get_active_project_name()
         paths = get_project_paths(pname)
         validate_stage_execution("prd", paths)
+
+        # Invalida las etapas posteriores para que deban ser regeneradas con el nuevo PRD
+        from tools.skill_loader import invalidate_from_stage
+        invalidate_from_stage(pname, "system_design", "Regeneración del PRD (Etapa 2)")
 
         prd_file = generate_prd_artifact(project_name=pname)
         commit_project_stage(pname, "prd", f"feat(prd): generate PRD and acceptance criteria for '{pname}'")
@@ -537,6 +743,10 @@ def generate_system_design_endpoint(project: Optional[str] = None):
         paths = get_project_paths(pname)
         validate_stage_execution("system_design", paths)
 
+        # Invalida las etapas posteriores para que deban ser regeneradas con el nuevo diseño
+        from tools.skill_loader import invalidate_from_stage
+        invalidate_from_stage(pname, "code_modification", "Regeneración de Arquitectura y Tareas (Etapa 3)")
+
         design_file, tasks_file = generate_system_design_artifact(project_name=pname)
         commit_project_stage(pname, "system_design", f"feat(design): system design and tasks roadmap for '{pname}'")
         return {
@@ -552,6 +762,35 @@ def generate_system_design_endpoint(project: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/actions/generate/code")
+def generate_code_endpoint(project: Optional[str] = None):
+    """Etapa 4: El Programador implementa el código en workspace y emite CHANGE_PLAN.md y model.patch."""
+    try:
+        pname = project or get_active_project_name()
+        paths = get_project_paths(pname)
+        validate_stage_execution("code_modification", paths)
+
+        # Invalida las etapas posteriores de QA y Runner local ante nuevo código
+        from tools.skill_loader import invalidate_from_stage
+        invalidate_from_stage(pname, "qa_report", "Nueva implementación de código en workspace (Etapa 4)")
+
+        change_plan_path, patch_path, generated_files = generate_code_implementation(project_name=pname)
+        commit_project_stage(pname, "code_modification", f"feat(code): implement source code, change plan and tests for '{pname}'")
+
+        return {
+            "success": True,
+            "project_name": pname,
+            "message": f"Código fuente implementado con éxito por el Programador para '{pname}' ({len(generated_files)} archivos creados en workspace).",
+            "files": generated_files,
+            "change_plan": str(change_plan_path),
+            "patch": str(patch_path),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/actions/run_qa")
 def run_qa_endpoint(project: Optional[str] = None):
     """Etapa 5: Ejecuta la auditoría hostil de límites y la suite de tests sobre el proyecto activo."""
@@ -559,6 +798,10 @@ def run_qa_endpoint(project: Optional[str] = None):
         pname = project or get_active_project_name()
         paths = get_project_paths(pname)
         validate_stage_execution("qa_report", paths)
+
+        # Invalida las etapas posteriores al correr nueva auditoría de QA
+        from tools.skill_loader import invalidate_from_stage
+        invalidate_from_stage(pname, "local_runner", "Nueva auditoría de QA ejecutada (Etapa 5)")
 
         approved, qa_file = run_qa_audit_and_tests(project_name=pname)
         tag = "v1.0.0" if approved else None
@@ -579,6 +822,199 @@ def run_qa_endpoint(project: Optional[str] = None):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/actions/generate/local_runner")
+def generate_local_runner_endpoint(project: Optional[str] = None):
+    """Etapa 6: Entorno de Pruebas Local para la PC de Desarrollo."""
+    try:
+        pname = project or get_active_project_name()
+        paths = get_project_paths(pname)
+        validate_stage_execution("local_runner", paths)
+
+        # Invalida la etapa de deploy cloud ante nuevo runner local
+        from tools.skill_loader import invalidate_from_stage
+        invalidate_from_stage(pname, "deploy", "Regeneración de Entorno Local (Etapa 6)")
+
+        spec_path, runner_path = generate_local_runner_artifact(project_name=pname)
+        commit_project_stage(
+            pname,
+            "local_runner",
+            f"feat(local-runner): setup local test environment and runner for '{pname}'"
+        )
+
+        return {
+            "success": True,
+            "project_name": pname,
+            "message": f"Entorno de pruebas local generado con éxito para '{pname}'. Servidor de prueba y sandbox listos en workspace/local_runner.py.",
+            "spec_file": str(spec_path),
+            "runner_file": str(runner_path),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Endpoints de Ejecución y Prueba en Vivo de la Aplicación en Workspace ---
+
+@app.post("/api/actions/app/start")
+def start_app_endpoint(project: Optional[str] = None):
+    """
+    Inicia el servidor de prueba local del proyecto en segundo plano y abre la URL
+    en el navegador predeterminado (o retorna la URL para carga en el frontend).
+    Utiliza preferentemente workspace/local_runner.py (Etapa 6) o workspace/main.py.
+    """
+    try:
+        pname = project or get_active_project_name()
+        paths = get_project_paths(pname)
+        set_active_project(paths["project_name"])
+        ws_dir = paths["workspace"]
+
+        # Compuerta Humana Crítica: Requiere que la Etapa 6 (local_runner) esté formalmente APROBADA
+        approvals = get_project_approvals(paths["context"])
+        if not approvals.get("local_runner", False):
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se puede iniciar el servidor de prueba para '{pname}': "
+                       f"La Etapa 6 (Entorno de Pruebas Local) debe estar formalmente APROBADA por el usuario antes de probar la aplicación."
+            )
+
+        # Determinar punto de entrada: preferir local_runner.py (Etapa 6), con fallback a main.py
+        runner_file = ws_dir / "local_runner.py"
+        if not runner_file.exists():
+            runner_file = ws_dir / "main.py"
+
+        if not ws_dir.exists() or not runner_file.exists():
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se puede iniciar el servidor de prueba: No existe 'local_runner.py' ni 'main.py' en projects/{pname}/workspace/. "
+                       f"Asegúrate de generar la Etapa 6 (Runner Local) primero."
+            )
+
+        # Si ya se encuentra activo y respondiendo, reutilizarlo y abrir el navegador
+        running_info = is_app_running(pname)
+        if running_info:
+            url = running_info["url"]
+            return {
+                "success": True,
+                "project_name": pname,
+                "port": running_info["port"],
+                "url": url,
+                "pid": running_info["pid"],
+                "already_running": True,
+                "message": f"La aplicación '{pname}' ya se encuentra activa en {url} y fue abierta en tu navegador."
+            }
+
+        # Encontrar puerto libre (evitando el 5000 del dashboard)
+        port = find_free_port(start_port=8000, max_port=8999)
+        url = f"http://localhost:{port}"
+
+        # Levantar el backend de prueba con el intérprete de Python activo
+        python_bin = sys.executable
+        proc = subprocess.Popen(
+            [python_bin, str(runner_file.resolve()), "--port", str(port)],
+            cwd=str(ws_dir),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+        )
+
+        APP_PROCESSES[pname] = {
+            "proc": proc,
+            "pid": proc.pid,
+            "port": port,
+            "url": url,
+            "project_name": pname,
+        }
+
+        # Esperar hasta 2.5s a que el servidor enlace el puerto
+        started = False
+        for _ in range(25):
+            time.sleep(0.1)
+            if proc.poll() is not None:
+                # Proceso terminó inesperadamente
+                _, err = proc.communicate(timeout=1)
+                err_text = err.decode("utf-8", errors="replace") if err else "Proceso finalizado prematuramente."
+                APP_PROCESSES.pop(pname, None)
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Fallo al levantar el servidor de '{pname}': {err_text}"
+                )
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.settimeout(0.15)
+                    if s.connect_ex(("127.0.0.1", port)) == 0:
+                        started = True
+                        break
+            except Exception:
+                pass
+
+        # Abrir en el navegador predeterminado: delegado al frontend (window.open) para evitar ventanas duplicadas
+
+        return {
+            "success": True,
+            "project_name": pname,
+            "port": port,
+            "url": url,
+            "pid": proc.pid,
+            "already_running": False,
+            "message": f"Servidor de prueba para '{pname}' levantado con éxito en {url} y cargado en el navegador."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/actions/app/status")
+def get_app_status_endpoint(project: Optional[str] = None):
+    """Retorna si el servidor de prueba del proyecto está activo y su puerto/URL."""
+    pname = project or get_active_project_name()
+    running_info = is_app_running(pname)
+    if running_info:
+        return {
+            "running": True,
+            "project_name": pname,
+            "port": running_info["port"],
+            "url": running_info["url"],
+            "pid": running_info["pid"],
+        }
+    return {
+        "running": False,
+        "project_name": pname,
+        "port": None,
+        "url": None,
+        "pid": None,
+    }
+
+
+def terminate_app_process(pname: str) -> bool:
+    """Detiene el proceso en segundo plano de la aplicación de prueba si está activo."""
+    info = APP_PROCESSES.pop(pname, None)
+    if info:
+        proc = info.get("proc")
+        if proc and proc.poll() is None:
+            try:
+                proc.terminate()
+                proc.wait(timeout=2)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+        return True
+    return False
+
+
+@app.post("/api/actions/app/stop")
+def stop_app_endpoint(project: Optional[str] = None):
+    """Detiene el servidor de prueba del proyecto si está en ejecución."""
+    pname = project or get_active_project_name()
+    stopped = terminate_app_process(pname)
+    if stopped:
+        return {"success": True, "message": f"Servidor de prueba de '{pname}' detenido."}
+    return {"success": True, "message": f"No había ningún servidor activo para '{pname}'."}
 
 
 @app.post("/api/actions/maintenance")
@@ -647,11 +1083,12 @@ def submit_maintenance_endpoint(req: MaintenanceRequest):
 @app.post("/api/actions/approve/{stage_key}")
 def approve_stage_endpoint(stage_key: str, project: Optional[str] = None):
     """Registra la aprobación humana explícita para una etapa del ciclo de vida del proyecto activo."""
-    valid_stages = ["discovery_notes", "prd", "system_design", "change_plan", "code_modification", "qa_report"]
+    valid_stages = ["discovery_notes", "prd", "system_design", "change_plan", "code_modification", "qa_report", "local_runner", "deploy"]
     if stage_key not in valid_stages:
         raise HTTPException(status_code=400, detail=f"Clave de etapa no válida para aprobación: '{stage_key}'")
 
     paths = get_project_paths(project)
+    set_active_project(paths["project_name"])
     approvals = get_project_approvals(paths["context"])
 
     # Regla: hasta que la etapa anterior no esté en estado 3 (Aprobado), no se puede aprobar una etapa posterior
@@ -661,6 +1098,8 @@ def approve_stage_endpoint(stage_key: str, project: Optional[str] = None):
         "change_plan": ("system_design", "Etapa 3 (Arquitecto - System Design)"),
         "code_modification": ("system_design", "Etapa 3 (Arquitecto - System Design)"),
         "qa_report": ("code_modification", "Etapa 4 (Programador - Código)"),
+        "local_runner": ("qa_report", "Etapa 5 (QA & Hostile Auditor)"),
+        "deploy": ("local_runner", "Etapa 6 (Entorno de Pruebas Local)"),
     }
     pred = predecessors.get(stage_key)
     if pred and not approvals.get(pred[0], False):
@@ -692,6 +1131,8 @@ def approve_stage_endpoint(stage_key: str, project: Optional[str] = None):
         "change_plan": "Etapa 4: Plan de Cambios",
         "code_modification": "Compuerta de Modificación de Fuentes",
         "qa_report": "Etapa 5: QA Hostile Auditor",
+        "local_runner": "Etapa 6: Entorno de Pruebas Local (PC de Desarrollo)",
+        "deploy": "Etapa 7: Deploy",
     }
     label = label_map.get(stage_key, stage_key)
     return {
@@ -705,30 +1146,17 @@ def approve_stage_endpoint(stage_key: str, project: Optional[str] = None):
 
 @app.post("/api/actions/revoke/{stage_key}")
 def revoke_approval_endpoint(stage_key: str, project: Optional[str] = None):
-    """Revoca la aprobación de una etapa y en cascada las etapas posteriores."""
-    paths = get_project_paths(project)
+    """
+    Revoca la aprobación de una etapa.
+    Por gobernanza de la Software Factory:
+      - La etapa revocada pasa a 'Por Aprobar' (aprobación = False, artefacto conservado).
+      - TODAS las etapas posteriores deben ser regeneradas, por lo tanto pasan al estado 'Pendiente'
+        (sus artefactos son archivados en artifacts/_superseded/<timestamp>/ y sus aprobaciones = False).
+    """
+    pname = project or get_active_project_name()
+    paths = get_project_paths(pname)
+    set_active_project(paths["project_name"])
     context_file = paths["context"]
-    ctx = {}
-    if context_file.exists():
-        with open(context_file, "r", encoding="utf-8") as f:
-            ctx = json.load(f)
-    ctx.setdefault("WORKFLOW_CONTEXT", {})
-    ctx["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})
-
-    stages_order = ["discovery_notes", "prd", "system_design", "code_modification", "qa_report"]
-    norm_key = "code_modification" if stage_key == "change_plan" else stage_key
-
-    if norm_key in stages_order:
-        start_idx = stages_order.index(norm_key)
-        for s in stages_order[start_idx:]:
-            ctx["WORKFLOW_CONTEXT"]["human_approvals"][s] = False
-        if norm_key == "code_modification" or start_idx <= stages_order.index("code_modification"):
-            ctx["WORKFLOW_CONTEXT"]["human_approvals"]["change_plan"] = False
-    else:
-        ctx["WORKFLOW_CONTEXT"]["human_approvals"][stage_key] = False
-
-    with open(context_file, "w", encoding="utf-8") as f:
-        json.dump(ctx, f, indent=4)
 
     label_map = {
         "discovery_notes": "Etapa 1: Discovery & Grilling",
@@ -737,15 +1165,229 @@ def revoke_approval_endpoint(stage_key: str, project: Optional[str] = None):
         "change_plan": "Etapa 4: Plan de Cambios",
         "code_modification": "Compuerta de Modificación de Fuentes",
         "qa_report": "Etapa 5: QA Hostile Auditor",
+        "local_runner": "Etapa 6: Entorno de Pruebas Local (PC de Desarrollo)",
+        "deploy": "Etapa 7: Deploy",
     }
     label = label_map.get(stage_key, stage_key)
+
+    stages_order = ["discovery_notes", "prd", "system_design", "code_modification", "qa_report", "local_runner", "deploy"]
+    norm_key = "code_modification" if stage_key == "change_plan" else stage_key
+
+    archived_info = {}
+    if norm_key in stages_order:
+        start_idx = stages_order.index(norm_key)
+
+        # 1. Todas las etapas posteriores deben ser regeneradas y pasar al estado 'Pendiente'
+        if start_idx + 1 < len(stages_order):
+            first_subsequent = stages_order[start_idx + 1]
+            from tools.skill_loader import invalidate_from_stage
+            archived_info = invalidate_from_stage(
+                pname,
+                first_subsequent,
+                f"Revocación de aprobación en etapa previa: '{label}' ({stage_key})"
+            )
+
+        # 2. La etapa actual pierde su aprobación humana (vuelve a Estado 2: 'Por Aprobar')
+        ctx = {}
+        if context_file.exists():
+            with open(context_file, "r", encoding="utf-8") as f:
+                ctx = json.load(f)
+        ctx.setdefault("WORKFLOW_CONTEXT", {})
+        approvals = ctx["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})
+        approvals[norm_key] = False
+        if stage_key == "change_plan" or norm_key == "code_modification":
+            approvals["change_plan"] = False
+            approvals["code_modification"] = False
+            # Si se revoca change_plan específicamente, archivar model.patch si existe
+            if stage_key == "change_plan":
+                patch_file = paths["03_code_patches"] / "model.patch"
+                if patch_file.exists():
+                    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    arch_patch = paths["artifacts"] / "_superseded" / ts / "03_code_patches" / "model.patch"
+                    arch_patch.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(patch_file), str(arch_patch))
+
+        with open(context_file, "w", encoding="utf-8") as f:
+            json.dump(ctx, f, indent=4)
+    else:
+        ctx = {}
+        if context_file.exists():
+            with open(context_file, "r", encoding="utf-8") as f:
+                ctx = json.load(f)
+        ctx.setdefault("WORKFLOW_CONTEXT", {})
+        ctx["WORKFLOW_CONTEXT"].setdefault("human_approvals", {})[stage_key] = False
+        with open(context_file, "w", encoding="utf-8") as f:
+            json.dump(ctx, f, indent=4)
+
+    # Detener servidor de prueba si estaba activo (al revocar etapas, la app no debe seguir en ejecución)
+    terminate_app_process(pname)
+
+    # Cargar contexto final actualizado
+    with open(context_file, "r", encoding="utf-8") as f:
+        final_ctx = json.load(f)
+
+    inval_msg = ""
+    if archived_info.get("invalidated_stages"):
+        inval_stages_str = ", ".join(archived_info["invalidated_stages"])
+        inval_msg = f" Las etapas posteriores ({inval_stages_str}) han pasado al estado 'Pendiente' y deberán ser regeneradas."
+
     return {
         "success": True,
-        "project_name": paths["project_name"],
-        "message": f"Aprobación revocada para '{label}'. La etapa vuelve a 'Por Aprobar' permitiendo su re-ejecución.",
+        "project_name": pname,
+        "message": f"Aprobación revocada para '{label}'.{inval_msg}",
         "stage_key": stage_key,
-        "human_approvals": ctx["WORKFLOW_CONTEXT"]["human_approvals"],
+        "invalidated_stages": archived_info.get("invalidated_stages", []),
+        "archived_files": archived_info.get("archived_files", []),
+        "human_approvals": final_ctx["WORKFLOW_CONTEXT"]["human_approvals"],
     }
+
+
+# --- Endpoints de Skills y Evolución del Motor ---
+
+@app.get("/api/skills")
+def list_skills_endpoint(project: Optional[str] = None):
+    """Lista los skills globales y de proyecto, su estado y el manifiesto del motor."""
+    pname = project or get_active_project_name()
+    skills = discover_skills(project_name=pname, include_inactive=True)
+    global_list = [s.to_dict(include_body=True) for s in skills if s.is_global]
+    project_list = [s.to_dict(include_body=True) for s in skills if not s.is_global]
+    info = get_factory_info()
+    return {
+        "project_name": pname,
+        "engine": info,
+        "global_skills": global_list,
+        "project_skills": project_list,
+        "total_active": len([s for s in skills if s.is_active()]),
+    }
+
+
+@app.post("/api/skills/project/propose")
+def propose_skill_endpoint(req: ProposeSkillRequest, project: Optional[str] = None):
+    """Propone un nuevo skill exclusivo para el proyecto en estado 'proposed'."""
+    pname = req.project_name or project or get_active_project_name()
+    try:
+        skill = propose_project_skill(
+            project_name=pname,
+            name=req.name,
+            description=req.description,
+            applies_to_stages=req.applies_to_stages,
+            instructions_md=req.instructions_md,
+            type_name=req.type,
+            structured_data=req.structured_data,
+        )
+        return {
+            "success": True,
+            "message": f"Skill de proyecto '{skill.name}' propuesto exitosamente en estado 'proposed'.",
+            "skill": skill.to_dict(include_body=True),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/skills/project/{name}/approve")
+def approve_skill_endpoint(name: str, project: Optional[str] = None):
+    """Aprueba un skill de proyecto, activándolo e invalidando en cascada las etapas afectadas."""
+    pname = project or get_active_project_name()
+    try:
+        res = approve_project_skill(project_name=pname, name=name)
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/skills/project/{name}/revoke")
+def revoke_skill_endpoint(name: str, project: Optional[str] = None):
+    """Revoca un skill de proyecto e invalida en cascada las etapas afectadas."""
+    pname = project or get_active_project_name()
+    try:
+        res = revoke_project_skill(project_name=pname, name=name)
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/skills/project/{name}")
+def delete_skill_endpoint(name: str, project: Optional[str] = None):
+    """Elimina la carpeta y registro de un skill de proyecto."""
+    pname = project or get_active_project_name()
+    try:
+        res = delete_project_skill(project_name=pname, name=name)
+        return res
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/skills/project/{name}/promote")
+def promote_skill_endpoint(name: str, project: Optional[str] = None):
+    """Propone promover un skill maduro de proyecto a la Software Factory global."""
+    pname = project or get_active_project_name()
+    try:
+        res = propose_promotion(project_name=pname, name=name)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/skills/promotions")
+def get_promotions_endpoint():
+    """Lista las propuestas de promoción de skills a nivel global."""
+    return {
+        "promotions": list_promotion_proposals()
+    }
+
+
+@app.post("/api/skills/promotions/{name}/approve")
+def approve_promotion_endpoint(name: str):
+    """Aprueba la promoción de un skill a global, versionando el motor con un bump de patch."""
+    try:
+        res = approve_promotion(name=name)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/factory/lessons")
+def list_lessons_endpoint():
+    """Retorna las lecciones aprendidas registradas durante el desarrollo de la Software Factory."""
+    return {
+        "lessons": list_lessons(),
+        "engine": get_factory_info(),
+    }
+
+
+@app.post("/api/factory/lessons")
+def register_lesson_endpoint(req: RegisterLessonRequest, project: Optional[str] = None):
+    """Registra una lección aprendida en factory/FACTORY_LESSONS.md."""
+    pname = req.project_name or project or get_active_project_name()
+    try:
+        res = register_lesson(
+            project=pname,
+            stage=req.stage,
+            symptom=req.symptom,
+            root_cause=req.root_cause,
+            target=req.target,
+            proposal=req.proposal,
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/factory/info")
+def factory_info_endpoint():
+    """Información del motor de la Software Factory (versión, modo de ejecución)."""
+    return get_factory_info()
+
 
 
 @app.get("/api/actions/preflight_code_check")

@@ -54,9 +54,9 @@ def check_environment(project_name: Optional[str] = None):
 
 
 def run_discovery(user_requirement: str, interactive: bool = True, project_name: Optional[str] = None):
-    """Fase 0: Requirements Discovery & Grilling según la metodología de AI Hero."""
+    """Etapa 1: Requirements Discovery & Grilling (Skill grill-me y gobernanza AGENTS.md §5)."""
     pname = project_name or get_active_project_name()
-    print(f"\n=== [FASE 0] Discovery & Grilling para Proyecto: '{pname}' ===")
+    print(f"\n=== [ETAPA 1: Discovery & Grilling] Elicitación con Skill 'grill-me' para: '{pname}' ===")
     discovery_path, _ = run_grill_interview(user_requirement, interactive=interactive, project_name=pname)
     print(f"-> Elicitación completada y decisiones congeladas en: {discovery_path}")
     commit_project_stage(pname, "discovery_notes", f"feat(discovery): freeze requirements for '{pname}'")
@@ -146,7 +146,22 @@ def run_qa_tester(project_name: Optional[str] = None):
         raise FileNotFoundError(f"Falta el reporte de QA en: {qa_report_path}")
 
     print(f"-> QA Report validado con éxito en: {qa_report_path}")
+
+
+def run_local_runner(project_name: Optional[str] = None):
+    """Fase 5 / Etapa 6: Genera el runner y entorno de prueba local en la PC de desarrollo."""
+    paths = get_project_paths(project_name)
+    pname = paths["project_name"]
+    print(f"\n=== [FASE 5 / ETAPA 6] Runtime Specialist: Verificando Entorno Local para '{pname}' ===")
+    spec_path = paths["05_local_runner"] / "LOCAL_TESTING_SPEC.md"
+    runner_path = paths["workspace"] / "local_runner.py"
+    if not spec_path.exists() or not runner_path.exists():
+        from tools.dashboard.agent_runners import generate_local_runner_artifact
+        spec_path, runner_path = generate_local_runner_artifact(pname)
+    print(f"-> Especificación local en: {spec_path}")
+    print(f"-> Lanzador local listo en: {runner_path}")
     print(f"\n*** Software Factory: CICLO COMPLETADO EXITOSAMENTE PARA '{pname}' ***")
+    return spec_path, runner_path
 
 
 def get_pending_requirement(project_name: Optional[str] = None):
@@ -167,13 +182,18 @@ def get_pending_requirement(project_name: Optional[str] = None):
 
 
 def run_pipeline(user_requirement: str, project_name: Optional[str] = None):
-    """Ejecuta el ciclo de vida completo de 4 fases para el proyecto especificado."""
+    """Ejecuta el ciclo de vida completo de la Software Factory para el proyecto especificado."""
     pname = project_name or get_active_project_name()
     check_environment(pname)
+    paths = get_project_paths(pname)
+    discovery_path = paths["01_prd"] / "DISCOVERY_NOTES.md"
+    if not discovery_path.exists():
+        run_discovery(user_requirement, interactive=False, project_name=pname)
     run_product_manager(user_requirement, project_name=pname)
     run_architect(project_name=pname)
     run_engineer(project_name=pname)
     run_qa_tester(project_name=pname)
+    run_local_runner(project_name=pname)
 
 
 if __name__ == "__main__":
@@ -181,12 +201,17 @@ if __name__ == "__main__":
         description="Software Factory Orchestrator con Aislamiento de Proyectos en projects/"
     )
     parser.add_argument("--project", help="Nombre del proyecto específico (por defecto: activo)")
+    parser.add_argument(
+        "--stage",
+        choices=["1", "2", "3", "4", "5", "6", "discovery", "prd", "system_design", "code", "qa", "local_runner"],
+        help="Ejecuta una etapa específica del ciclo de vida (ej: 1 o discovery)",
+    )
     parser.add_argument("--export", nargs="?", const="", help="Rescata/exporta la aplicación a exports/")
     parser.add_argument("--reset", action="store_true", help="Reinicia el ambiente del proyecto activo")
     parser.add_argument("--init", metavar="PROJECT_NAME", help="Inicializa una carpeta aislada para un nuevo proyecto")
     parser.add_argument("--delete", metavar="PROJECT_NAME", help="Elimina la carpeta de un proyecto")
     parser.add_argument("--interview", "--grill", nargs="?", const="", metavar="PROMPT",
-                        help="Ejecuta sesión interactiva de Grill-Me (Fase 0) para desgranar requerimientos")
+                        help="Ejecuta sesión interactiva de Grill-Me (Etapa 1) para desgranar requerimientos")
     parser.add_argument("--non-interactive", action="store_true",
                         help="Ejecuta la entrevista utilizando Smart Defaults")
     parser.add_argument("--ui", action="store_true", help="Inicia el Dashboard Web interactivo en http://localhost:5000")
@@ -212,6 +237,30 @@ if __name__ == "__main__":
         if args.interview is not None:
             prompt = args.interview if args.interview != "" else (args.req or f"Construir el sistema {args.init}")
             run_discovery(prompt, interactive=not args.non_interactive, project_name=args.init)
+    elif args.stage:
+        pname = args.project or get_active_project_name()
+        req = args.req or get_pending_requirement(pname)
+        stage_map = {
+            "1": "discovery", "discovery": "discovery",
+            "2": "prd", "prd": "prd",
+            "3": "system_design", "system_design": "system_design",
+            "4": "code", "code": "code",
+            "5": "qa", "qa": "qa",
+            "6": "local_runner", "local_runner": "local_runner",
+        }
+        target_stage = stage_map.get(args.stage, args.stage)
+        if target_stage == "discovery":
+            run_discovery(req, interactive=not args.non_interactive, project_name=pname)
+        elif target_stage == "prd":
+            run_product_manager(req, project_name=pname)
+        elif target_stage == "system_design":
+            run_architect(project_name=pname)
+        elif target_stage == "code":
+            run_engineer(project_name=pname)
+        elif target_stage == "qa":
+            run_qa_tester(project_name=pname)
+        elif target_stage == "local_runner":
+            run_local_runner(project_name=pname)
     elif args.interview is not None:
         pname = args.project or get_active_project_name()
         prompt = args.interview if args.interview != "" else (args.req or get_pending_requirement(pname))

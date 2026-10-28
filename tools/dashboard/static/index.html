@@ -38,6 +38,12 @@
       </div>
 
       <div class="header-actions">
+        <button id="btn-run-app" class="btn btn-run-app" title="Bloqueado: Requiere que la Etapa 6 esté formalmente Aprobada" disabled>
+          ▶️ Probar App
+        </button>
+        <button id="btn-stop-app" class="btn btn-secondary btn-sm hidden" title="Detener el servidor de prueba" style="padding: 6px 10px; font-size: 0.8rem; background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.4);">
+          ⏹️ Detener
+        </button>
         <button id="btn-open-launcher" class="btn btn-secondary" title="Abrir selector de proyectos (Cargar de Git o Crear Nuevo)">
           📂 Proyectos
         </button>
@@ -47,6 +53,12 @@
         <button id="btn-open-maintenance" class="btn btn-secondary" title="Solicitar corrección o nueva funcionalidad (Lazo de Mantenimiento)">
           🛠️ Mantenimiento
         </button>
+        <button id="btn-open-skills" class="btn btn-secondary" title="Gestionar Skills y Restricciones del Proyecto">
+          🧩 Skills
+        </button>
+        <button id="btn-open-lesson" class="btn btn-secondary" title="Registrar Lección Aprendida del Motor (Modo Desarrollo)">
+          💡 Lección
+        </button>
         <button id="btn-export-app" class="btn btn-secondary" title="Exportar y empaquetar aplicación actual">
           📦 Exportar
         </button>
@@ -55,62 +67,6 @@
         </button>
       </div>
     </header>
-
-    <!-- Pipeline Visual de 5 Etapas (1 a 5) -->
-    <nav class="pipeline-stepper" aria-label="Progreso de las etapas">
-      <div class="step-card" id="step-discovery" data-stage="discovery_notes">
-        <div class="step-number">1</div>
-        <div class="step-info">
-          <div class="step-title">Discovery & Grilling</div>
-          <div class="step-sub">DISCOVERY_NOTES.md</div>
-        </div>
-        <span class="step-status-badge badge-pending" id="badge-discovery">Pendiente</span>
-      </div>
-
-      <div class="step-arrow">➔</div>
-
-      <div class="step-card" id="step-prd" data-stage="prd">
-        <div class="step-number">2</div>
-        <div class="step-info">
-          <div class="step-title">Product Manager</div>
-          <div class="step-sub">PRD.md & User Stories</div>
-        </div>
-        <span class="step-status-badge badge-pending" id="badge-prd">Pendiente</span>
-      </div>
-
-      <div class="step-arrow">➔</div>
-
-      <div class="step-card" id="step-system_design" data-stage="system_design">
-        <div class="step-number">3</div>
-        <div class="step-info">
-          <div class="step-title">Arquitecto</div>
-          <div class="step-sub">SYSTEM_DESIGN.md</div>
-        </div>
-        <span class="step-status-badge badge-pending" id="badge-system_design">Pendiente</span>
-      </div>
-
-      <div class="step-arrow">➔</div>
-
-      <div class="step-card" id="step-patch" data-stage="patch">
-        <div class="step-number">4</div>
-        <div class="step-info">
-          <div class="step-title">Programador</div>
-          <div class="step-sub">Código & model.patch</div>
-        </div>
-        <span class="step-status-badge badge-pending" id="badge-patch">Pendiente</span>
-      </div>
-
-      <div class="step-arrow">➔</div>
-
-      <div class="step-card" id="step-qa_report" data-stage="qa_report">
-        <div class="step-number">5</div>
-        <div class="step-info">
-          <div class="step-title">QA Hostile Auditor</div>
-          <div class="step-sub">QA_REPORT.md & Tests</div>
-        </div>
-        <span class="step-status-badge badge-pending" id="badge-qa_report">Pendiente</span>
-      </div>
-    </nav>
 
     <!-- Cuerpo Principal con Sidebar y Panel de Contenido -->
     <main class="main-content-layout">
@@ -137,35 +93,73 @@
           </div>
         </div>
 
-        <!-- Artefactos del ciclo activo / seleccionado -->
+        <!-- Menú de Etapas de la Software Factory (Lateral) -->
         <div class="sidebar-section">
-          <h2 class="sidebar-heading">Artefactos del Ciclo</h2>
-          <ul class="artifact-tree" id="artifact-tree">
-            <li class="artifact-item active" data-artifact="discovery_notes">
-              <span class="file-icon">📋</span> DISCOVERY_NOTES.md
-            </li>
-            <li class="artifact-item hidden" id="item-delta-req" data-artifact="delta_requirement">
-              <span class="file-icon">🛠️</span> DELTA_REQUIREMENT.txt
-            </li>
-            <li class="artifact-item" data-artifact="prd">
-              <span class="file-icon">📄</span> PRD.md
-            </li>
-            <li class="artifact-item" data-artifact="system_design">
-              <span class="file-icon">📐</span> SYSTEM_DESIGN.md
-            </li>
-            <li class="artifact-item" data-artifact="tasks">
-              <span class="file-icon">✅</span> TASKS.md
-            </li>
-            <li class="artifact-item" data-artifact="change_plan">
-              <span class="file-icon">📝</span> CHANGE_PLAN.md
-            </li>
-            <li class="artifact-item" data-artifact="patch">
-              <span class="file-icon">🧩</span> model.patch
-            </li>
-            <li class="artifact-item" data-artifact="qa_report">
-              <span class="file-icon">🛡️</span> QA_REPORT.md
-            </li>
-          </ul>
+          <div class="sidebar-header-row">
+            <h2 class="sidebar-heading">Etapas</h2>
+            <span class="stages-progress-indicator" id="stages-progress-text">0 / 7</span>
+          </div>
+
+          <nav class="stages-menu" id="stages-menu" aria-label="Etapas de Fabricación">
+            <!-- 1. Requisitos -->
+            <div class="stage-sidebar-item step-card active" id="step-discovery" data-stage="discovery_notes">
+              <span class="stage-nav-number">1</span>
+              <span class="stage-nav-title">Requisitos</span>
+              <span class="stage-status-icon icon-pending" id="status-icon-discovery" title="Pendiente">⚪</span>
+            </div>
+
+            <!-- 2. Gerente de Productos -->
+            <div class="stage-sidebar-item step-card" id="step-prd" data-stage="prd">
+              <span class="stage-nav-number">2</span>
+              <span class="stage-nav-title">Gerente de Productos</span>
+              <span class="stage-status-icon icon-locked" id="status-icon-prd" title="Bloqueado">🔒</span>
+            </div>
+
+            <!-- 3. Arquitecto -->
+            <div class="stage-sidebar-item step-card" id="step-system_design" data-stage="system_design">
+              <span class="stage-nav-number">3</span>
+              <span class="stage-nav-title">Arquitecto</span>
+              <span class="stage-status-icon icon-locked" id="status-icon-system_design" title="Bloqueado">🔒</span>
+            </div>
+
+            <!-- 4. Programador -->
+            <div class="stage-sidebar-item step-card" id="step-patch" data-stage="patch">
+              <span class="stage-nav-number">4</span>
+              <span class="stage-nav-title">Programador</span>
+              <span class="stage-status-icon icon-locked" id="status-icon-patch" title="Bloqueado">🔒</span>
+            </div>
+
+            <!-- 5. Auditor -->
+            <div class="stage-sidebar-item step-card" id="step-qa_report" data-stage="qa_report">
+              <span class="stage-nav-number">5</span>
+              <span class="stage-nav-title">Auditor</span>
+              <span class="stage-status-icon icon-locked" id="status-icon-qa_report" title="Bloqueado">🔒</span>
+            </div>
+
+            <!-- 6. Test Local -->
+            <div class="stage-sidebar-item step-card" id="step-local_runner" data-stage="local_runner">
+              <span class="stage-nav-number">6</span>
+              <span class="stage-nav-title">Test Local</span>
+              <span class="stage-status-icon icon-locked" id="status-icon-local_runner" title="Bloqueado">🔒</span>
+            </div>
+
+            <!-- 7. Deploy -->
+            <div class="stage-sidebar-item step-card" id="step-deploy" data-stage="deploy">
+              <span class="stage-nav-number">7</span>
+              <span class="stage-nav-title">Deploy</span>
+              <span class="stage-status-icon icon-locked" id="status-icon-deploy" title="Bloqueado">🔒</span>
+            </div>
+          </nav>
+        </div>
+
+        <!-- Solicitud de Mantenimiento Activa -->
+        <div class="sidebar-section hidden" id="item-delta-req">
+          <h2 class="sidebar-heading">Mantenimiento Activo</h2>
+          <div class="stage-sidebar-item step-card" data-stage="delta_requirement" data-artifact="delta_requirement">
+            <span class="stage-nav-number">🛠️</span>
+            <span class="stage-nav-title">Modificación (RFC)</span>
+            <span class="stage-status-icon icon-review" id="status-icon-delta" title="Mantenimiento en curso">⏳</span>
+          </div>
         </div>
 
         <!-- Archivos en Workspace -->
@@ -203,6 +197,7 @@
               <span class="approval-badge badge-pending-approval" id="stage-approval-badge">⏳ Requiere Aprobación Humana</span>
             </div>
             <span class="stage-action-desc" id="stage-action-desc">Genera el PRD.md a partir de las decisiones congeladas en Discovery.</span>
+            <div class="stage-skills-badges" id="stage-skills-badges" style="display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; align-items: center;"></div>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
             <button class="btn btn-success-action" id="btn-approve-stage" title="Aprobar formalmente esta etapa y autorizar la siguiente fase">
@@ -350,8 +345,20 @@
           <div class="wizard-step" id="wstep-4">4. Confirmación</div>
         </div>
 
+        <!-- Banner de Skills Activos para la Elicitación -->
+        <div id="grill-skills-banner" style="background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.35); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; font-size: 0.82rem;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 1.15rem;">⚡</span>
+            <span><strong>Skills Activos:</strong> <code style="background: rgba(0,0,0,0.3); padding: 2px 7px; border-radius: 4px; color: #a5b4fc;">grill-me v1.1.0</code> <code style="background: rgba(0,0,0,0.3); padding: 2px 7px; border-radius: 4px; color: #a5b4fc;">domain-modeling v1.0.0</code> <code style="background: rgba(0,0,0,0.3); padding: 2px 7px; border-radius: 4px; color: #a5b4fc;">api-design v1.0.0</code></span>
+          </div>
+          <span style="color: #cbd5e1; font-size: 0.78rem; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 8px; border-radius: 4px;">👤 Agente: <strong>Rita (Discovery)</strong></span>
+        </div>
+
         <!-- RONDA 1 -->
         <div class="wizard-pane active" id="wpane-1">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <span style="font-size: 0.75rem; color: #818cf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🏷️ Skill: grill-me (Árbol de Decisión & Smart Defaults)</span>
+          </div>
           <div class="form-group" id="group-grill-proj-name">
             <label for="grill-proj-name" id="lbl-grill-proj-name">Nombre del Proyecto:</label>
             <input type="text" id="grill-proj-name" class="form-control" placeholder="Ej: Reservas Taller" value="Reservas Taller">
@@ -364,19 +371,34 @@
           </div>
 
           <div class="form-group">
-            <label for="grill-opt-platform">❓ Ronda 1: ¿Qué tipo de plataforma o interfaz tendrá la aplicación?</label>
+            <label for="grill-opt-platform">❓ Ronda 1.1: ¿Qué tipo de plataforma o interfaz tendrá la aplicación?</label>
             <select id="grill-opt-platform" class="form-control">
-              <option value="web_rest" selected>🌐 API RESTful Web / Backend (FastAPI / HTTP JSON) — Recomendado</option>
-              <option value="web_spa">💻 Aplicación Web Fullstack (Frontend SPA Web + Backend API)</option>
+              <option value="web_spa" selected>💻 Aplicación Web Fullstack con Pantalla Inicial Interactiva (Frontend Web SPA + Backend API) — Recomendado</option>
+              <option value="web_rest">🌐 API RESTful Web / Backend (FastAPI / HTTP JSON puro)</option>
               <option value="win_gui">🖥️ Aplicación de Escritorio / Windows GUI (Ventana nativa Tkinter / PyQt)</option>
               <option value="cli_app">⌨️ Herramienta de Terminal CLI Interactiva (Consola de comandos)</option>
               <option value="microservice">⚙️ Microservicio Interno (gRPC / Cola de Mensajes)</option>
             </select>
           </div>
+
+          <div class="form-group" id="group-grill-ui-layout">
+            <label for="grill-opt-ui-layout">🎨 Ronda 1.2: Diseño y Experiencia de la Pantalla Inicial:</label>
+            <select id="grill-opt-ui-layout" class="form-control">
+              <option value="weather_dashboard">🌤️ Dashboard Meteorológico interactivo con buscador mundial, tiempo actual con termómetro °C/°F y pronóstico extendido</option>
+              <option value="interactive_dashboard" selected>📊 Tablero / Dashboard interactivo con tarjetas de métricas en tiempo real y filtros</option>
+              <option value="search_detail">🔍 Buscador centralizado con panel de detalle expandible</option>
+              <option value="crud_manager">📋 Panel de administración y gestión tabular con formularios</option>
+              <option value="none_headless">⚙️ Sin interfaz gráfica (API Backend puro / Headless)</option>
+            </select>
+            <div id="grill-ui-hint" style="font-size: 0.74rem; color: #38bdf8; margin-top: 4px;">✨ La pantalla inicial se servirá en <code>http://localhost:port/</code> con diseño moderno y reactivo.</div>
+          </div>
         </div>
 
         <!-- RONDA 2 -->
         <div class="wizard-pane hidden" id="wpane-2">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <span style="font-size: 0.75rem; color: #818cf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🏷️ Skills: domain-modeling (Entidades) & api-design (Seguridad & RFC 7807)</span>
+          </div>
           <div class="form-group">
             <label for="grill-opt-entities">❓ Ronda 2.1: Entidades Principales del Dominio (separadas por coma):</label>
             <input type="text" id="grill-opt-entities" class="form-control" placeholder="Ej: Productos, Clientes, Facturas" value="Productos, Clientes, Facturas">
@@ -403,6 +425,9 @@
 
         <!-- RONDA 3 -->
         <div class="wizard-pane hidden" id="wpane-3">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <span style="font-size: 0.75rem; color: #818cf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🏷️ Skill: grill-me (Persistencia WAL & Estrategia de Caché)</span>
+          </div>
           <div class="form-group">
             <label for="grill-opt-persistence">❓ Ronda 3.1: Motor de Base de Datos y Persistencia:</label>
             <select id="grill-opt-persistence" class="form-control">
@@ -425,6 +450,9 @@
 
         <!-- RONDA 4 (Resumen) -->
         <div class="wizard-pane hidden" id="wpane-4">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <span style="font-size: 0.75rem; color: #818cf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">🏷️ Gobernanza: Congelamiento de Contrato y Trazabilidad (AGENTS.md §5)</span>
+          </div>
           <div class="summary-box">
             <h4>📋 Resumen del Contrato a Congelar</h4>
             <div id="grill-summary-content" style="margin-top: 10px; font-size: 0.85rem; line-height: 1.8;">
@@ -490,18 +518,22 @@
           <select id="maint-type" class="form-control">
             <option value="rfc" selected>💡 Nuevo Requerimiento / RFC Evolutivo (Ampliación de funcionalidad)</option>
             <option value="bugfix">🐛 Corrección de Defecto / Bugfix (Ajuste de fallo o caso extremo)</option>
+            <option value="skill">🧩 Preferencia Duradera / Skill de Proyecto (Regla de diseño persistente para el proyecto)</option>
           </select>
         </div>
+        <div id="maint-skill-redirect-box" class="hidden" style="background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 6px; padding: 10px; margin-bottom: 12px; font-size: 0.82rem; color: #bae6fd;">
+          ℹ️ Las preferencias duraderas se gestionan como <strong>Skills de Proyecto</strong>. Puedes redactar la regla a continuación y la guardaremos como propuesta de skill, o usar el <a href="#" id="maint-open-skills-link" style="color: #38bdf8; text-decoration: underline;">Gestor de Skills</a> directamente.
+        </div>
         <div class="form-group">
-          <label for="maint-title">Título del Cambio o Issue:</label>
-          <input type="text" id="maint-title" class="form-control" placeholder="Ej: Agregar exportación a formato CSV / Corregir error en cálculo de fechas">
+          <label for="maint-title">Título del Cambio o Regla:</label>
+          <input type="text" id="maint-title" class="form-control" placeholder="Ej: Agregar exportación a CSV / Regla de hashing Argon2 para contraseñas">
         </div>
         <div class="form-group">
           <label for="maint-desc">Descripción Detallada y Criterios Esperados:</label>
-          <textarea id="maint-desc" class="form-control" rows="4" placeholder="Describe qué debe modificarse, entradas/salidas y casos de prueba esperados..."></textarea>
+          <textarea id="maint-desc" class="form-control" rows="4" placeholder="Describe qué debe modificarse, entradas/salidas o la regla restrictiva a incorporar..."></textarea>
         </div>
         <div class="note-box" style="margin-top: 10px; font-size: 0.82rem; color: #94a3b8; background: rgba(30, 41, 59, 0.5); padding: 10px; border-radius: 6px; border-left: 3px solid #6366f1;">
-          ℹ️ Esta acción no reinicia el proyecto. Conserva el código en <code>environment/workspace/</code> y genera <code>DELTA_REQUIREMENT.txt</code> para que el PM y el Arquitecto actualicen las especificaciones incrementales.
+          ℹ️ Esta acción no reinicia el proyecto. Conserva el código en <code>environment/workspace/</code>. En caso de RFC/Bugfix genera <code>DELTA_REQUIREMENT.txt</code>; en caso de Skill genera una propuesta en <code>.agents/skills/</code>.
         </div>
       </div>
       <div class="modal-footer">
@@ -559,6 +591,148 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" id="btn-reject-code-approval">❌ Rechazar / Solicitar Ajustes</button>
         <button class="btn btn-primary" id="btn-confirm-code-approval">✅ Aprobar y Autorizar Modificación de Fuentes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 6: Gestor de Skills y Restricciones -->
+  <div class="modal-backdrop hidden" id="modal-skills">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>🧩 Gestor de Skills y Reglas de Diseño</h3>
+          <p class="modal-subtitle">Conocimiento, restricciones y guías duraderas aplicadas a las etapas del proyecto activo.</p>
+        </div>
+        <button class="modal-close" id="btn-close-skills">&times;</button>
+      </div>
+      <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+        
+        <!-- Acciones Rápidas -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <span style="font-size: 0.85rem; color: #94a3b8;">Proyecto activo: </span>
+            <strong id="skills-modal-pname" style="color: #38bdf8;">-</strong>
+          </div>
+          <button id="btn-toggle-new-skill-form" class="btn btn-primary btn-sm">
+            ➕ Proponer Skill de Proyecto
+          </button>
+        </div>
+
+        <!-- Formulario para proponer nuevo skill de proyecto (oculto por defecto) -->
+        <div id="new-skill-form-box" class="hidden" style="background: rgba(30, 41, 59, 0.7); border: 1px solid #38bdf8; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+          <h4 style="font-size: 0.95rem; color: #38bdf8; margin-bottom: 12px;">📝 Proponer Nuevo Skill para este Proyecto</h4>
+          <p style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 12px;">
+            El skill se guardará en <code>projects/&lt;p&gt;/.agents/skills/</code>. <strong>Regla de Gobernanza:</strong> Sólo puede AGREGAR restricciones; al ser aprobado invalidará en cascada las etapas afectadas para que se regeneren con estas reglas.
+          </p>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label style="font-size: 0.8rem;">Nombre del Skill (identificador kebab-case):</label>
+            <input type="text" id="new-skill-name" class="form-control" placeholder="Ej: strict-auth-rules, audit-logging, naming-conventions">
+          </div>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label style="font-size: 0.8rem;">Descripción corta:</label>
+            <input type="text" id="new-skill-desc" class="form-control" placeholder="Ej: Exige validación JWT obligatoria y roles RBAC en todas las rutas">
+          </div>
+          <div class="form-group" style="margin-bottom: 10px;">
+            <label style="font-size: 0.8rem;">Etapas a las que aplica (marcar las afectadas):</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; font-size: 0.8rem; color: #cbd5e1;">
+              <label><input type="checkbox" name="skill-stage" value="discovery_notes"> 1. Requisitos</label>
+              <label><input type="checkbox" name="skill-stage" value="prd" checked> 2. PM / PRD</label>
+              <label><input type="checkbox" name="skill-stage" value="system_design" checked> 3. Arquitecto</label>
+              <label><input type="checkbox" name="skill-stage" value="code_modification" checked> 4. Programador</label>
+              <label><input type="checkbox" name="skill-stage" value="qa_report" checked> 5. Auditor QA</label>
+              <label><input type="checkbox" name="skill-stage" value="local_runner"> 6. Test Local</label>
+              <label><input type="checkbox" name="skill-stage" value="deploy"> 7. Deploy</label>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label style="font-size: 0.8rem;">Instrucciones y Restricciones (Markdown):</label>
+            <textarea id="new-skill-body" class="form-control" rows="5" placeholder="## Restricciones Obligatorias&#10;- Todo endpoint /api/* debe validar token bearer&#10;- Prohibido retornar passwords en texto plano..."></textarea>
+          </div>
+          <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button id="btn-cancel-new-skill" class="btn btn-secondary btn-sm">Cancelar</button>
+            <button id="btn-submit-new-skill" class="btn btn-primary btn-sm">💾 Guardar Propuesta</button>
+          </div>
+        </div>
+
+        <!-- Sección: Skills Específicos del Proyecto -->
+        <div style="margin-bottom: 24px;">
+          <h4 style="font-size: 0.9rem; color: #a5b4fc; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            <span>📁 Skills de este Proyecto (Overlays)</span>
+            <span id="project-skills-count" class="badge-stage" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; font-size: 0.7rem;">0</span>
+          </h4>
+          <div id="project-skills-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size: 0.8rem; color: #64748b; font-style: italic;">No hay skills de proyecto registrados todavía.</div>
+          </div>
+        </div>
+
+        <!-- Sección: Skills Globales del Motor SoftFactory -->
+        <div>
+          <h4 style="font-size: 0.9rem; color: #34d399; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
+            <span>🌐 Skills Globales del Motor</span>
+            <span id="global-skills-count" class="badge-stage" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-size: 0.7rem;">3</span>
+          </h4>
+          <p style="font-size: 0.78rem; color: #94a3b8; margin-bottom: 10px;">
+            Estos skills forman parte de la biblioteca central de la Software Factory y aplican a todos los proyectos.
+          </p>
+          <div id="global-skills-list" style="display: flex; flex-direction: column; gap: 10px;">
+            <!-- Renderizado dinámicamente -->
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-close-skills-footer">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 7: Lecciones Aprendidas del Motor (Evolución de la Factory) -->
+  <div class="modal-backdrop hidden" id="modal-lesson">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3>💡 Registrar Lección Aprendida del Motor</h3>
+          <p class="modal-subtitle">Documenta fallos o mejoras detectadas en pruebas para que la Software Factory evolucione.</p>
+        </div>
+        <button class="modal-close" id="btn-close-lesson">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 0.8rem;">Etapa donde ocurrió la observación:</label>
+          <select id="lesson-stage" class="form-control">
+            <option value="general">Global / General</option>
+            <option value="discovery_notes">Etapa 1: Discovery & Grilling</option>
+            <option value="prd">Etapa 2: Product Manager</option>
+            <option value="system_design">Etapa 3: Arquitecto</option>
+            <option value="code_modification">Etapa 4: Programador</option>
+            <option value="qa_report">Etapa 5: QA Hostile Auditor</option>
+            <option value="local_runner">Etapa 6: Test Local</option>
+            <option value="deploy">Etapa 7: Deploy</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 0.8rem;">Objetivo de la Mejora:</label>
+          <select id="lesson-target" class="form-control">
+            <option value="engine" selected>⚙️ Motor SoftFactory (SOPs, Agentes, Guardarraíles)</option>
+            <option value="skill">🧩 Biblioteca Global de Skills (.agents/skills/)</option>
+          </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 0.8rem;">Síntoma Observado / Fallo:</label>
+          <textarea id="lesson-symptom" class="form-control" rows="2" placeholder="Ej: El programador creó un helper fuera de workspace/ o el runner eligió un puerto ocupado..."></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 0.8rem;">Causa Raíz Identificada:</label>
+          <textarea id="lesson-cause" class="form-control" rows="2" placeholder="Ej: La plantilla de boundaries no incluía la verificación estricta de rutas relativas..."></textarea>
+        </div>
+        <div class="form-group" style="margin-bottom: 12px;">
+          <label style="font-size: 0.8rem;">Propuesta de Mejora / Regla Preventiva:</label>
+          <textarea id="lesson-proposal" class="form-control" rows="2" placeholder="Ej: Agregar regla en AGENTS.md y validación previa en agent_runners.py..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-cancel-lesson">Cancelar</button>
+        <button class="btn btn-primary" id="btn-submit-lesson">💾 Registrar Lección en FACTORY_LESSONS.md</button>
       </div>
     </div>
   </div>

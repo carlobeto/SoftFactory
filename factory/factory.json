@@ -1,0 +1,5 @@
+{
+    "engine_version": "0.8.0",
+    "mode": "development",
+    "_doc": "mode: 'development' habilita el registro de lecciones del motor desde el Dashboard. En 'production' se deshabilita. Ver AGENTS.md §5."
+}

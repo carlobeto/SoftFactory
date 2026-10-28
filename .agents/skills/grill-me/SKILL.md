@@ -1,6 +1,9 @@
 ---
 name: grill-me
 description: Entrevista exhaustiva, interactiva y estructurada por rondas de diseño para refinar requerimientos iniciales de software y APIs antes de generar el PRD.
+version: 1.1.0
+type: knowledge
+applies_to_stages: [discovery_notes]
 ---
 
 # Skill: Grill-Me para Software Factory (Requirements Discovery)

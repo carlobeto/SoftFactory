@@ -1,0 +1,189 @@
+{
+  "version": "1.1.0",
+  "_doc": "Árbol de preguntas (Design Tree Frontier) consumido por tools/requirements_interviewer.py. type: 'choice' (options + recommended) o 'free_text' (default). recommend_if/default_if: reglas por palabras clave en el requerimiento semilla.",
+  "rounds": [
+    {
+      "title": "RONDA 1: Propósito del Sistema, Interfaz y Entidades",
+      "questions": [
+        {
+          "key": "api_style",
+          "type": "choice",
+          "title": "Estilo Arquitectónico y Protocolo",
+          "description": "¿Qué estilo de API y formato de transferencia se requiere?",
+          "matrix_label": "Estilo Arquitectónico",
+          "options": {
+            "web_spa": "Aplicación Web Fullstack con Pantalla Inicial Interactiva (Frontend Web SPA + Backend API)",
+            "rest_json": "RESTful API sobre HTTP con payloads JSON y códigos de estado estándar",
+            "fastapi": "FastAPI (Python) asíncrono con esquemas Pydantic y documentación OpenAPI/Swagger automática",
+            "grpc": "gRPC con Protobuf para alta performance y baja latencia",
+            "cli_api": "Herramienta CLI interactiva con comandos enriquecidos"
+          },
+          "recommended": "rest_json",
+          "recommend_if": [
+            {"prompt_contains_any": ["pantalla", "pantalla inicial", "interfaz", "frontend", "ui", "vista", "dashboard", "clima", "tiempo", "meteorológico", "weather", "pronostico", "pronóstico"], "value": "web_spa"},
+            {"prompt_contains_any": ["fastapi"], "value": "fastapi"}
+          ]
+        },
+        {
+          "key": "ui_layout",
+          "type": "choice",
+          "title": "Diseño y Estructura de la Pantalla Inicial",
+          "description": "¿Qué componentes y disposición visual tendrá la pantalla inicial de la aplicación?",
+          "matrix_label": "Pantalla Inicial & UI",
+          "options": {
+            "weather_dashboard": "Dashboard Meteorológico interactivo con buscador mundial, tiempo actual con termómetro °C/°F, métricas de viento/humedad y pronóstico extendido",
+            "interactive_dashboard": "Tablero / Dashboard interactivo con tarjetas de métricas en tiempo real, filtros y gráficos",
+            "search_detail": "Buscador centralizado con visualización de resultados y panel de detalle expandible",
+            "crud_manager": "Panel de administración y gestión tabular con formularios de registro",
+            "none_headless": "Sin interfaz gráfica (Servicio Backend API puro / Headless)"
+          },
+          "recommended": "interactive_dashboard",
+          "recommend_if": [
+            {"prompt_contains_any": ["clima", "tiempo", "meteorológico", "weather", "pronostico", "pronóstico"], "value": "weather_dashboard"},
+            {"prompt_contains_any": ["pantalla", "pantalla inicial", "interfaz", "frontend", "dashboard"], "value": "interactive_dashboard"}
+          ]
+        },
+        {
+          "key": "ui_theme",
+          "type": "choice",
+          "title": "Tema y Estilo Visual de la Pantalla",
+          "description": "¿Qué estética y tema visual se aplicará a la interfaz?",
+          "matrix_label": "Tema Visual & Estilo",
+          "options": {
+            "weather_dark": "Dark Mode Meteorológico Moderno con gradientes dinámicos según el tiempo, tipografía Google Outfit e iconos animados",
+            "modern_dark": "Modern Dark Mode (Slate/Indigo) con efectos glassmorphism y micro-animaciones",
+            "clean_light": "Light Mode Minimalista de alto contraste y diseño plano limpio"
+          },
+          "recommended": "modern_dark",
+          "recommend_if": [
+            {"prompt_contains_any": ["clima", "tiempo", "meteorológico", "weather", "pronostico", "pronóstico"], "value": "weather_dark"}
+          ]
+        },
+        {
+          "key": "consumers",
+          "type": "choice",
+          "title": "Consumidores y Clientes del Sistema",
+          "description": "¿Quiénes interactuarán directamente con esta API?",
+          "matrix_label": "Consumidores Clave",
+          "options": {
+            "spa_mobile": "Usuarios en navegador web (Pantalla Inicial SPA) y clientes móviles",
+            "microservices": "Otros microservicios y sistemas backend (comunicación inter-servicio)",
+            "third_party": "Desarrolladores y clientes externos a través de una API pública con rate-limiting",
+            "internal_cli": "Operadores de sistemas mediante scripts y terminales CLI"
+          },
+          "recommended": "spa_mobile"
+        },
+        {
+          "key": "entities",
+          "type": "free_text",
+          "title": "Entidades y Recursos Principales del Dominio",
+          "description": "Define los 2 a 4 recursos clave que gestionará la API (ej: Productos, Clientes, Pedidos).",
+          "default": "Items, Categorias, Movimientos",
+          "default_if": [
+            {"prompt_contains_any": ["clima", "tiempo", "meteorológico", "weather", "pronostico", "pronóstico"], "value": "Ciudades, Pronósticos, ClimaActual"},
+            {"prompt_contains_any": ["pantalla", "pantalla inicial", "interfaz", "dashboard"], "value": "Vistas, Componentes, Métricas"},
+            {"prompt_contains_any": ["taller", "reserva", "turno"], "value": "Clientes, Vehiculos, Turnos, Servicios"},
+            {"prompt_contains_any": ["tarea", "todo"], "value": "Tareas, Proyectos, Etiquetas"},
+            {"prompt_contains_any": ["usuario", "auth"], "value": "Usuarios, Roles, Sesiones"},
+            {"prompt_contains_any": ["inventario", "stock"], "value": "Productos, Almacenes, Lotes, Stock"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "RONDA 2: Seguridad, Autenticación y Esquema de Errores",
+      "questions": [
+        {
+          "key": "auth_scheme",
+          "type": "choice",
+          "title": "Esquema de Autenticación y Seguridad",
+          "description": "¿Qué mecanismo de protección de endpoints se implementará?",
+          "matrix_label": "Seguridad & Auth",
+          "options": {
+            "jwt_bearer": "Bearer Token (JWT) con expiración y soporte para Refresh Token",
+            "api_key": "Cabecera 'X-API-Key' estática o administrable para cada cliente",
+            "session_cookies": "Cookies de sesión HTTP-Only (Seguras contra XSS/CSRF)",
+            "public_no_auth": "Acceso libre/público sin autenticación (sólo para endpoints informativos o MVP)"
+          },
+          "recommended": "jwt_bearer"
+        },
+        {
+          "key": "error_format",
+          "type": "choice",
+          "title": "Estructura de Respuestas de Error",
+          "description": "¿Cómo responderá la API ante excepciones y fallos de validación (4xx / 5xx)?",
+          "matrix_label": "Gestión de Errores",
+          "options": {
+            "rfc7807": "RFC 7807 (Problem Details: 'type', 'title', 'status', 'detail', 'invalid_params')",
+            "standard_json": "JSON uniforme simple: {'success': false, 'error': {'code': '...', 'message': '...'}}",
+            "http_status_only": "Códigos de estado HTTP básicos con texto plano"
+          },
+          "recommended": "rfc7807"
+        }
+      ]
+    },
+    {
+      "title": "RONDA 3: Persistencia de Datos y Rendimiento",
+      "questions": [
+        {
+          "key": "persistence",
+          "type": "choice",
+          "title": "Motor de Base de Datos y Persistencia",
+          "description": "¿Dónde residirán los datos del sistema?",
+          "matrix_label": "Persistencia",
+          "options": {
+            "sqlite": "SQLite3 local con WAL activado (ligera, embebida, ideal para pruebas y microservicios autocontenidos)",
+            "postgresql": "PostgreSQL relacional con soporte para transacciones complejas y extensiones",
+            "in_memory": "Almacenamiento en memoria volátil (Dicts/Memory-DB) con opción de volcado JSON",
+            "mongodb": "Base de datos de documentos NoSQL para esquemas altamente variables"
+          },
+          "recommended": "sqlite"
+        },
+        {
+          "key": "caching",
+          "type": "choice",
+          "title": "Estrategia de Caché y Optimización de Consultas",
+          "description": "¿Se requiere acelerar las lecturas con mecanismos de caché?",
+          "matrix_label": "Caché & Rendimiento",
+          "options": {
+            "ttl_memory": "Caché en memoria local con tiempo de expiración (TTL) y purga automática",
+            "redis": "Caché distribuida externa Redis con soporte pub/sub",
+            "no_cache": "Sin capa de caché (consultas directas a persistencia para el MVP)"
+          },
+          "recommended": "ttl_memory"
+        }
+      ]
+    },
+    {
+      "title": "RONDA 4: Criterios de Aceptación, Validación y Despliegue",
+      "questions": [
+        {
+          "key": "validation",
+          "type": "choice",
+          "title": "Validación de Entradas y Tipado Estricto",
+          "description": "¿Cómo se verificarán los payloads enviados por los clientes?",
+          "matrix_label": "Validación de Datos",
+          "options": {
+            "strict_schemas": "Esquemas estrictos tipados (Pydantic / dataclasses) con rechazo automático 422",
+            "manual_validation": "Validación manual ligera de campos obligatorios en cada controlador",
+            "permissive": "Aceptación flexible con conversión de tipos automática"
+          },
+          "recommended": "strict_schemas"
+        },
+        {
+          "key": "deployment",
+          "type": "choice",
+          "title": "Estrategia de Empaquetado y Despliegue",
+          "description": "¿Cómo se empaquetará la solución para producción?",
+          "matrix_label": "Estrategia Despliegue",
+          "options": {
+            "docker_slim": "Contenedor Docker (python:3.11-slim) con entrypoint preconfigurado y healthcheck",
+            "standalone_cli": "Script Python ejecutable o paquete instalable con pyproject.toml",
+            "compose": "Entorno multi-servicio con Docker Compose"
+          },
+          "recommended": "docker_slim"
+        }
+      ]
+    }
+  ]
+}

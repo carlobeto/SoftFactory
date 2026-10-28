@@ -51,7 +51,13 @@
             "prd": false,
             "system_design": false,
             "code_modification": false,
-            "qa_report": false
-        }
+            "qa_report": false,
+            "local_runner": false,
+            "deploy": false
+        },
+        "project_skills": {},
+        "skills_snapshot": {},
+        "artifact_provenance": {},
+        "invalidation_log": []
     }
 }

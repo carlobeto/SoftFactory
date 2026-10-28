@@ -1,6 +1,9 @@
 ---
 name: api-design
 description: Principios y estándares para el diseño de contratos de APIs (REST, OpenAPI, gRPC) y estructuración de especificaciones de interfaz en la Software Factory.
+version: 1.0.0
+type: knowledge
+applies_to_stages: [discovery_notes, system_design]
 ---
 
 # Skill: API Design (Contract-First)
